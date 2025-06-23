@@ -1,154 +1,208 @@
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { createStackNavigator } from '@react-navigation/stack';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View, Image, TouchableOpacity, Animated } from 'react-native';
-import { useState, useEffect, useRef } from 'react';
+import { BasicProvider, useBasic } from '@basictech/expo';
+import { MaterialIcons } from '@expo/vector-icons';
+import { View, Text } from 'react-native';
 
-export default function App() {
-  const [theme, setTheme] = useState('light');
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(0.9)).current;
+import { schema } from './basic.config';
+import AuthScreen from './screens/AuthScreen';
+import SocialFeedScreen from './screens/SocialFeedScreen';
+import ProfileScreen from './screens/ProfileScreen';
+import TeamsScreen from './screens/TeamsScreen';
+import MatchesScreen from './screens/MatchesScreen';
+import NotificationsScreen from './screens/NotificationsScreen';
+import CreatePostScreen from './screens/CreatePostScreen';
+import CreateTeamScreen from './screens/CreateTeamScreen';
+import CreateMatchScreen from './screens/CreateMatchScreen';
+import MatchDetailScreen from './screens/MatchDetailScreen';
+import ChatScreen from './screens/ChatScreen';
+import AnalyticsScreen from './screens/AnalyticsScreen';
+import TournamentScreen from './screens/TournamentScreen';
+import LeaderboardScreen from './screens/LeaderboardScreen';
+import CoinTossScreen from './screens/CoinTossScreen';
 
-  useEffect(() => {
-    // Fade in animation when component mounts
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 1000,
-        useNativeDriver: true,
-      }),
-      Animated.spring(scaleAnim, {
-        toValue: 1,
-        friction: 4,
-        tension: 40,
-        useNativeDriver: true,
-      })
-    ]).start();
-  });
+const Tab = createBottomTabNavigator();
+const Stack = createStackNavigator();
 
-  const toggleTheme = () => {
-    setTheme(theme === 'light' ? 'dark' : 'light');
-  };
-
-  const logoSource = theme === 'light' 
-    ? require('./assets/images/appacella-logo-blue.png')
-    : require('./assets/images/appacella-logo-white.png');
-
+function MainTabs() {
   return (
-    <View style={[
-      styles.container,
-      { backgroundColor: theme === 'light' ? '#f0f8ff' : '#1a1a2e' }
-    ]}>
-      <Animated.View style={[
-        styles.content,
-        { 
-          opacity: fadeAnim,
-          transform: [{ scale: scaleAnim }]
-        }
-      ]}>
-        <Image 
-          source={logoSource} 
-          style={styles.logo} 
-          resizeMode="contain"
-        />
-        
-        <Text style={[
-          styles.title,
-          { color: theme === 'light' ? '#333' : '#fff' }
-        ]}>
-          Welcome to Kiki
-        </Text>
-        
-        <Text style={[
-          styles.subtitle,
-          { color: theme === 'light' ? '#666' : '#ccc' }
-        ]}>
-          Tell the AI what to make!
-        </Text>
+    <Tab.Navigator
+      screenOptions={({ route }) => ({
+        tabBarIcon: ({ focused, color, size }) => {
+          let iconName;
 
-        <View style={styles.reactContainer}>
-          <Text style={[
-            styles.poweredBy,
-            { color: theme === 'light' ? '#666' : '#ccc' }
-          ]}>
-            Powered by
-          </Text>
-          <Image 
-            source={require('./assets/images/react-logo.png')} 
-            style={styles.reactLogo} 
-            resizeMode="contain"
-          />
-        </View>
-      </Animated.View>
+          if (route.name === 'Feed') {
+            iconName = 'home';
+          } else if (route.name === 'Teams') {
+            iconName = 'group';
+          } else if (route.name === 'Matches') {
+            iconName = 'sports-cricket';
+          } else if (route.name === 'Profile') {
+            iconName = 'person';
+          } else if (route.name === 'Notifications') {
+            iconName = 'notifications';
+          }
 
-      <TouchableOpacity 
-        style={[
-          styles.themeToggle,
-          { backgroundColor: theme === 'light' ? '#333' : '#f0f8ff' }
-        ]} 
-        onPress={toggleTheme}
-      >
-        <Text style={{ 
-          color: theme === 'light' ? '#fff' : '#333',
-          fontWeight: 'bold'
-        }}>
-          {theme === 'light' ? '🌙' : '☀️'}
-        </Text>
-      </TouchableOpacity>
-      
-      <StatusBar style={theme === 'light' ? 'dark' : 'light'} />
-    </View>
+          return <MaterialIcons name={iconName} size={size} color={color} />;
+        },
+        tabBarActiveTintColor: '#FFD700',
+        tabBarInactiveTintColor: '#666',
+        tabBarStyle: {
+          backgroundColor: '#2E7D32',
+          borderTopWidth: 0,
+          elevation: 8,
+          shadowOpacity: 0.1,
+          shadowRadius: 4,
+          shadowOffset: { width: 0, height: -2 },
+        },
+        headerStyle: {
+          backgroundColor: '#2E7D32',
+        },
+        headerTintColor: '#FFD700',
+        headerTitleStyle: {
+          fontWeight: 'bold',
+          fontSize: 18,
+        },
+      })}
+    >
+      <Tab.Screen 
+        name="Feed" 
+        component={SocialFeedScreen} 
+        options={{ title: 'GullyCricketX' }}
+      />
+      <Tab.Screen 
+        name="Teams" 
+        component={TeamsScreen} 
+        options={{ title: 'Teams' }}
+      />
+      <Tab.Screen 
+        name="Matches" 
+        component={MatchesScreen} 
+        options={{ title: 'Matches' }}
+      />
+      <Tab.Screen 
+        name="Profile" 
+        component={ProfileScreen} 
+        options={{ title: 'Profile' }}
+      />
+      <Tab.Screen 
+        name="Notifications" 
+        component={NotificationsScreen} 
+        options={{ title: 'Notifications' }}
+      />
+    </Tab.Navigator>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  content: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-  },
-  logo: {
-    width: 200,
-    height: 100,
-    marginBottom: 20,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 18,
-    marginBottom: 30,
-    textAlign: 'center',
-  },
-  reactContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 40,
-  },
-  poweredBy: {
-    fontSize: 14,
-    marginRight: 6,
-  },
-  reactLogo: {
-    width: 24,
-    height: 24,
-  },
-  themeToggle: {
-    position: 'absolute',
-    top: 50,
-    right: 20,
-    padding: 10,
-    borderRadius: 20,
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+function AppStack() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: '#2E7D32',
+        },
+        headerTintColor: '#FFD700',
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
+      }}
+    >
+      <Stack.Screen 
+        name="MainTabs" 
+        component={MainTabs} 
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen 
+        name="CreatePost" 
+        component={CreatePostScreen} 
+        options={{ title: 'Create Post' }}
+      />
+      <Stack.Screen 
+        name="CreateTeam" 
+        component={CreateTeamScreen} 
+        options={{ title: 'Create Team' }}
+      />
+      <Stack.Screen 
+        name="CreateMatch" 
+        component={CreateMatchScreen} 
+        options={{ title: 'Schedule Match' }}
+      />
+      <Stack.Screen 
+        name="MatchDetail" 
+        component={MatchDetailScreen} 
+        options={{ title: 'Match Details' }}
+      />
+      <Stack.Screen 
+        name="Chat" 
+        component={ChatScreen} 
+        options={{ title: 'Match Chat' }}
+      />
+      <Stack.Screen 
+        name="Analytics" 
+        component={AnalyticsScreen} 
+        options={{ title: 'Match Analytics' }}
+      />
+      <Stack.Screen 
+        name="Tournament" 
+        component={TournamentScreen} 
+        options={{ title: 'Tournaments' }}
+      />
+      <Stack.Screen 
+        name="Leaderboard" 
+        component={LeaderboardScreen} 
+        options={{ title: 'Leaderboard' }}
+      />
+      <Stack.Screen 
+        name="CoinToss" 
+        component={CoinTossScreen} 
+        options={{ title: 'Coin Toss' }}
+      />
+    </Stack.Navigator>
+  );
+}
+
+function AppContent() {
+  const { isSignedIn, user, isLoading } = useBasic();
+
+  if (isLoading) {
+    return (
+      <View style={{ 
+        flex: 1, 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        backgroundColor: '#1B5E20' 
+      }}>
+        <MaterialIcons name="sports-cricket" size={60} color="#FFD700" />
+        <Text style={{ 
+          color: '#FFD700', 
+          fontSize: 18, 
+          marginTop: 16, 
+          fontWeight: 'bold' 
+        }}>
+          Loading GullyCricketX...
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <NavigationContainer>
+      {isSignedIn && user ? <AppStack /> : <AuthScreen />}
+    </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <BasicProvider project_id={schema.project_id} schema={schema}>
+        <AppContent />
+        <StatusBar style="light" />
+      </BasicProvider>
+    </SafeAreaProvider>
+  );
+}
