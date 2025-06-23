@@ -26,7 +26,7 @@ interface Team {
 
 export default function TeamsScreen() {
   const { db, user } = useBasic();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const [teams, setTeams] = useState<Team[]>([]);
   const [myTeams, setMyTeams] = useState<Team[]>([]);
   const [loading, setLoading] = useState(true);

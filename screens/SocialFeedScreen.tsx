@@ -29,7 +29,7 @@ interface Post {
 
 export default function SocialFeedScreen() {
   const { db, user } = useBasic();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const [posts, setPosts] = useState<Post[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);

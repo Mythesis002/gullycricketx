@@ -16,7 +16,7 @@ import { useBasic } from '@basictech/expo';
 const { width } = Dimensions.get('window');
 
 export default function AuthScreen() {
-  const { login, isLoading, db } = useBasic();
+  const { login, isLoading, db, user } = useBasic();
   const [showRegistration, setShowRegistration] = useState(false);
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
@@ -41,6 +41,26 @@ export default function AuthScreen() {
     };
     bounce();
   }, []);
+
+  useEffect(() => {
+    // Check if user profile exists after login
+    if (user && db) {
+      checkUserProfile();
+    }
+  }, [user, db]);
+
+  const checkUserProfile = async () => {
+    try {
+      const users = await db?.from('users').getAll();
+      const userProfile = users?.find(u => u.email === user?.email);
+      
+      if (!userProfile) {
+        setShowRegistration(true);
+      }
+    } catch (error) {
+      console.error('Error checking user profile:', error);
+    }
+  };
 
   const generateJerseyNumber = () => {
     const number = Math.floor(Math.random() * 99) + 1;

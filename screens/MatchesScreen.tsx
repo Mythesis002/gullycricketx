@@ -35,7 +35,7 @@ interface Match {
 
 export default function MatchesScreen() {
   const { db, user } = useBasic();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -220,26 +220,28 @@ export default function MatchesScreen() {
           )}
 
           {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            <TouchableOpacity style={styles.actionButton}>
-              <MaterialIcons name="visibility" size={18} color="#2E7D32" />
-              <Text style={styles.actionButtonText}>View Details</Text>
-            </TouchableOpacity>
+          <View style={styles.actionsSection}>
+            <Text style={styles.sectionTitle}>Match Actions</Text>
             
-            {isLive && (
+            <View style={styles.actionButtons}>
+              <TouchableOpacity style={styles.actionButton} onPress={handleOpenChat}>
+                <MaterialIcons name="chat" size={24} color="#FFD700" />
+                <Text style={styles.actionButtonText}>Match Chat</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.actionButton} onPress={handleViewAnalytics}>
+                <MaterialIcons name="analytics" size={24} color="#FFD700" />
+                <Text style={styles.actionButtonText}>Analytics</Text>
+              </TouchableOpacity>
+              
               <TouchableOpacity 
                 style={styles.actionButton}
-                onPress={() => navigation.navigate('Chat', { matchId: item.id })}
+                onPress={() => navigation.navigate('Leaderboard')}
               >
-                <MaterialIcons name="chat" size={18} color="#2E7D32" />
-                <Text style={styles.actionButtonText}>Chat</Text>
+                <MaterialIcons name="leaderboard" size={24} color="#FFD700" />
+                <Text style={styles.actionButtonText}>Leaderboard</Text>
               </TouchableOpacity>
-            )}
-            
-            <TouchableOpacity style={styles.actionButton}>
-              <MaterialIcons name="analytics" size={18} color="#2E7D32" />
-              <Text style={styles.actionButtonText}>Stats</Text>
-            </TouchableOpacity>
+            </View>
           </View>
         </TouchableOpacity>
       </Animated.View>
@@ -577,6 +579,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#2E7D32',
+  },
+  actionsSection: {
+    marginTop: 16,
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#666',
+    marginBottom: 8,
   },
   actionButtons: {
     flexDirection: 'row',

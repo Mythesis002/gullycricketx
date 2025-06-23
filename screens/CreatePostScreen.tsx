@@ -19,7 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 export default function CreatePostScreen() {
   const { db, user } = useBasic();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const [text, setText] = useState('');
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);

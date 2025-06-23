@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useBasic } from '@basictech/expo';
+import { useNavigation } from '@react-navigation/native';
 
 interface UserProfile {
   id: string;
@@ -38,6 +39,7 @@ interface Badge {
 
 export default function ProfileScreen() {
   const { db, user, signout } = useBasic();
+  const navigation = useNavigation<any>();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -220,14 +222,20 @@ export default function ProfileScreen() {
                 <Text style={styles.actionText}>Edit Profile</Text>
               </TouchableOpacity>
               
-              <TouchableOpacity style={styles.actionButton}>
-                <MaterialIcons name="history" size={24} color="#FFD700" />
-                <Text style={styles.actionText}>Match History</Text>
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => navigation.navigate('Leaderboard')}
+              >
+                <MaterialIcons name="leaderboard" size={24} color="#FFD700" />
+                <Text style={styles.actionText}>View Leaderboard</Text>
               </TouchableOpacity>
               
-              <TouchableOpacity style={styles.actionButton}>
-                <MaterialIcons name="leaderboard" size={24} color="#FFD700" />
-                <Text style={styles.actionText}>My Rankings</Text>
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => navigation.navigate('Tournament')}
+              >
+                <MaterialIcons name="emoji-events" size={24} color="#FFD700" />
+                <Text style={styles.actionText}>Tournaments</Text>
               </TouchableOpacity>
             </View>
           </View>

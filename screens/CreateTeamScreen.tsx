@@ -25,7 +25,7 @@ interface Player {
 
 export default function CreateTeamScreen() {
   const { db, user } = useBasic();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const [teamName, setTeamName] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [allPlayers, setAllPlayers] = useState<Player[]>([]);
