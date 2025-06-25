@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
@@ -24,6 +24,8 @@ import AnalyticsScreen from './screens/AnalyticsScreen';
 import TournamentScreen from './screens/TournamentScreen';
 import LeaderboardScreen from './screens/LeaderboardScreen';
 import CoinTossScreen from './screens/CoinTossScreen';
+import EditProfileScreen from './screens/EditProfileScreen';
+import ProfileSetupScreen from './screens/ProfileSetupScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -163,14 +165,43 @@ function AppStack() {
         component={CoinTossScreen} 
         options={{ title: 'Coin Toss' }}
       />
+      <Stack.Screen 
+        name="EditProfile" 
+        component={EditProfileScreen} 
+        options={{ title: 'Edit Profile' }}
+      />
     </Stack.Navigator>
   );
 }
 
 function AppContent() {
-  const { isSignedIn, user, isLoading } = useBasic();
+  const { isSignedIn, user, isLoading, db } = useBasic();
+  const [hasProfile, setHasProfile] = useState<boolean | null>(null);
+  const [checkingProfile, setCheckingProfile] = useState(true);
 
-  if (isLoading) {
+  useEffect(() => {
+    if (isSignedIn && user && db) {
+      checkUserProfile();
+    } else {
+      setCheckingProfile(false);
+      setHasProfile(null);
+    }
+  }, [isSignedIn, user, db]);
+
+  const checkUserProfile = async () => {
+    try {
+      const users = await db?.from('users').getAll();
+      const userProfile = (users as any[])?.find(u => u.email === user?.email);
+      setHasProfile(!!userProfile);
+    } catch (error) {
+      console.error('Error checking user profile:', error);
+      setHasProfile(false);
+    } finally {
+      setCheckingProfile(false);
+    }
+  };
+
+  if (isLoading || checkingProfile) {
     return (
       <View style={{ 
         flex: 1, 
@@ -193,7 +224,11 @@ function AppContent() {
 
   return (
     <NavigationContainer>
-      {isSignedIn && user ? <AppStack /> : <AuthScreen />}
+      {isSignedIn && user ? (
+        hasProfile ? <AppStack /> : <ProfileSetupScreen />
+      ) : (
+        <AuthScreen />
+      )}
     </NavigationContainer>
   );
 }

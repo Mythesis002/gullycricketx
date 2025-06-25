@@ -217,7 +217,10 @@ export default function ProfileScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
             <View style={styles.actionsContainer}>
-              <TouchableOpacity style={styles.actionButton}>
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => navigation.navigate('EditProfile')}
+              >
                 <MaterialIcons name="edit" size={24} color="#FFD700" />
                 <Text style={styles.actionText}>Edit Profile</Text>
               </TouchableOpacity>
@@ -236,6 +239,14 @@ export default function ProfileScreen() {
               >
                 <MaterialIcons name="emoji-events" size={24} color="#FFD700" />
                 <Text style={styles.actionText}>Tournaments</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => navigation.navigate('CreateTeam')}
+              >
+                <MaterialIcons name="group-add" size={24} color="#FFD700" />
+                <Text style={styles.actionText}>Create Team</Text>
               </TouchableOpacity>
             </View>
           </View>
