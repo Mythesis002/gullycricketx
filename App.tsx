@@ -26,6 +26,7 @@ import LeaderboardScreen from './screens/LeaderboardScreen';
 import CoinTossScreen from './screens/CoinTossScreen';
 import EditProfileScreen from './screens/EditProfileScreen';
 import ProfileSetupScreen from './screens/ProfileSetupScreen';
+import DebugScreen from './screens/DebugScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -169,6 +170,11 @@ function AppStack() {
         name="EditProfile" 
         component={EditProfileScreen} 
         options={{ title: 'Edit Profile' }}
+      />
+      <Stack.Screen 
+        name="Debug" 
+        component={DebugScreen} 
+        options={{ title: 'Debug Info' }}
       />
     </Stack.Navigator>
   );

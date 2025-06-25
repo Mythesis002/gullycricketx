@@ -46,15 +46,23 @@ export default function SocialFeedScreen() {
 
   const fetchPosts = async () => {
     try {
+      console.log('Fetching posts...');
       const fetchedPosts = await db?.from('posts').getAll();
-      if (fetchedPosts) {
+      console.log('Fetched posts:', fetchedPosts);
+      
+      if (fetchedPosts && fetchedPosts.length > 0) {
         // Sort by newest first
         const sortedPosts = (fetchedPosts as any[]).sort((a, b) => b.createdAt - a.createdAt);
         setPosts(sortedPosts);
+        console.log('Sorted posts:', sortedPosts);
+      } else {
+        console.log('No posts found');
+        setPosts([]);
       }
     } catch (error) {
       console.error('Error fetching posts:', error);
       Alert.alert('Error', 'Failed to load posts');
+      setPosts([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -100,20 +108,33 @@ export default function SocialFeedScreen() {
             <MaterialIcons name="person" size={24} color="#1B5E20" />
           </View>
           <View style={styles.userDetails}>
-            <Text style={styles.userName}>{item.userName}</Text>
+            <Text style={styles.userName}>{item.userName || 'Unknown Player'}</Text>
             <View style={styles.jerseyContainer}>
               <MaterialIcons name="sports" size={14} color="#FFD700" />
-              <Text style={styles.jerseyNumber}>#{item.jerseyNumber}</Text>
+              <Text style={styles.jerseyNumber}>#{item.jerseyNumber || '00'}</Text>
             </View>
           </View>
         </View>
         <Text style={styles.timeAgo}>{formatTimeAgo(item.createdAt)}</Text>
       </View>
 
-      <Text style={styles.postText}>{item.text}</Text>
+      {item.text && item.text.trim() && (
+        <Text style={styles.postText}>{item.text}</Text>
+      )}
 
-      {item.imageUrl && (
-        <Image source={{ uri: item.imageUrl }} style={styles.postImage} />
+      {item.imageUrl && item.imageUrl.trim() && (
+        <View style={styles.imageWrapper}>
+          <Image 
+            source={{ uri: item.imageUrl }} 
+            style={styles.postImage}
+            onError={(error) => {
+              console.log('Image load error:', error);
+            }}
+            onLoad={() => {
+              console.log('Image loaded successfully');
+            }}
+          />
+        </View>
       )}
 
       <View style={styles.postActions}>
@@ -122,13 +143,19 @@ export default function SocialFeedScreen() {
           onPress={() => handleLike(item.id, item.likes)}
         >
           <MaterialIcons name="thumb-up" size={20} color="#FFD700" />
-          <Text style={styles.actionText}>{item.likes}</Text>
+          <Text style={styles.actionText}>{item.likes || 0}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.actionButton}>
           <MaterialIcons name="comment" size={20} color="#FFD700" />
           <Text style={styles.actionText}>
-            {item.comments ? JSON.parse(item.comments).length : 0}
+            {item.comments ? (() => {
+              try {
+                return JSON.parse(item.comments).length;
+              } catch {
+                return 0;
+              }
+            })() : 0}
           </Text>
         </TouchableOpacity>
 
@@ -315,6 +342,12 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 8,
     marginBottom: 12,
+    backgroundColor: '#F5F5F5',
+  },
+  imageWrapper: {
+    marginBottom: 12,
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   postActions: {
     flexDirection: 'row',

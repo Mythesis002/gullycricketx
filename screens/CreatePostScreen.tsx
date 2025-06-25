@@ -62,13 +62,19 @@ export default function CreatePostScreen() {
     setPosting(true);
 
     try {
+      console.log('Creating post...');
+      console.log('User:', user);
+      
       // Get user profile to get jersey number
-      const userProfile = await db?.from('users').getAll();
-      const currentUser = userProfile?.find(u => u.email === user?.email);
+      const userProfiles = await db?.from('users').getAll();
+      console.log('User profiles:', userProfiles);
+      
+      const currentUser = (userProfiles as any[])?.find(u => u.email === user?.email);
+      console.log('Current user profile:', currentUser);
 
       const postData = {
-        userId: user?.id || '',
-        userName: currentUser?.name || user?.name || 'Unknown Player',
+        userId: user?.id || user?.email || 'unknown',
+        userName: currentUser?.name || user?.name || 'Cricket Player',
         jerseyNumber: currentUser?.jerseyNumber || '00',
         text: text.trim(),
         imageUrl: selectedImage || '',
@@ -77,9 +83,12 @@ export default function CreatePostScreen() {
         createdAt: Date.now(),
       };
 
-      await db?.from('posts').add(postData);
+      console.log('Post data:', postData);
       
-      Alert.alert('Success', 'Post created successfully!', [
+      const result = await db?.from('posts').add(postData);
+      console.log('Post created:', result);
+      
+      Alert.alert('Success! 🎉', 'Your post has been shared with the cricket community!', [
         { text: 'OK', onPress: () => navigation.goBack() }
       ]);
     } catch (error) {

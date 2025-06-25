@@ -248,6 +248,14 @@ export default function ProfileScreen() {
                 <MaterialIcons name="group-add" size={24} color="#FFD700" />
                 <Text style={styles.actionText}>Create Team</Text>
               </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => navigation.navigate('Debug')}
+              >
+                <MaterialIcons name="bug-report" size={24} color="#FFD700" />
+                <Text style={styles.actionText}>Debug Info</Text>
+              </TouchableOpacity>
             </View>
           </View>
 
