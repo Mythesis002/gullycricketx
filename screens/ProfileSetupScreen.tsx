@@ -109,8 +109,8 @@ export default function ProfileSetupScreen() {
 
       Alert.alert(
         'Welcome to GullyCricketX! 🎉',
-        'Your profile has been created successfully. Let\'s start playing cricket!',
-        [{ text: 'Let\'s Go!', onPress: () => {} }]
+        'Your profile has been created successfully. Let us start playing cricket!',
+        [{ text: 'Let us Go!', onPress: () => {} }]
       );
     } catch (error) {
       console.error('Error creating profile:', error);
@@ -124,7 +124,7 @@ export default function ProfileSetupScreen() {
     <View style={styles.stepContainer}>
       <View style={styles.stepHeader}>
         <MaterialIcons name="person" size={60} color="#FFD700" />
-        <Text style={styles.stepTitle}>What's your name?</Text>
+        <Text style={styles.stepTitle}>What is your name?</Text>
         <Text style={styles.stepSubtitle}>
           This is how other players will know you on the field
         </Text>
@@ -254,7 +254,6 @@ export default function ProfileSetupScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-          {/* Progress Indicator */}
           <View style={styles.progressContainer}>
             <Text style={styles.progressText}>Step {currentStep} of 3</Text>
             <View style={styles.progressBar}>
@@ -262,12 +261,10 @@ export default function ProfileSetupScreen() {
             </View>
           </View>
 
-          {/* Step Content */}
           {currentStep === 1 && renderStep1()}
           {currentStep === 2 && renderStep2()}
           {currentStep === 3 && renderStep3()}
 
-          {/* Welcome Message */}
           <View style={styles.welcomeContainer}>
             <Text style={styles.welcomeTitle}>🏏 Welcome to GullyCricketX!</Text>
             <Text style={styles.welcomeText}>
