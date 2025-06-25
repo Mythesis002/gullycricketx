@@ -47,7 +47,7 @@ export default function CreateMatchScreen() {
     try {
       const fetchedTeams = await db?.from('teams').getAll();
       if (fetchedTeams) {
-        setTeams(fetchedTeams);
+        setTeams(fetchedTeams as any[]);
       }
     } catch (error) {
       console.error('Error fetching teams:', error);

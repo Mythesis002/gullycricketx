@@ -55,7 +55,7 @@ export default function MatchesScreen() {
     try {
       const fetchedMatches = await db?.from('matches').getAll();
       if (fetchedMatches) {
-        const sortedMatches = fetchedMatches.sort((a, b) => {
+        const sortedMatches = (fetchedMatches as any[]).sort((a, b) => {
           const dateA = new Date(`${a.date} ${a.time}`).getTime();
           const dateB = new Date(`${b.date} ${b.time}`).getTime();
           return dateB - dateA;
@@ -74,6 +74,14 @@ export default function MatchesScreen() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchMatches();
+  };
+
+  const handleOpenChat = (matchId: string) => {
+    navigation.navigate('Chat', { matchId });
+  };
+
+  const handleViewAnalytics = (matchId: string) => {
+    navigation.navigate('Analytics', { matchId });
   };
 
   const getFilteredMatches = () => {
@@ -135,7 +143,7 @@ export default function MatchesScreen() {
     }
   };
 
-  const renderMatch = ({ item }: { item: Match }) => {
+  const renderMatch = ({ item }: { item: any }) => {
     const statusText = getStatusText(item);
     const statusColor = getStatusColor(item.status);
     const isLive = item.status === 'live' || item.status === 'in_progress';
@@ -220,28 +228,29 @@ export default function MatchesScreen() {
           )}
 
           {/* Action Buttons */}
-          <View style={styles.actionsSection}>
-            <Text style={styles.sectionTitle}>Match Actions</Text>
+          <View style={styles.actionButtons}>
+            <TouchableOpacity style={styles.actionButton}>
+              <MaterialIcons name="visibility" size={18} color="#2E7D32" />
+              <Text style={styles.actionButtonText}>View Details</Text>
+            </TouchableOpacity>
             
-            <View style={styles.actionButtons}>
-              <TouchableOpacity style={styles.actionButton} onPress={handleOpenChat}>
-                <MaterialIcons name="chat" size={24} color="#FFD700" />
-                <Text style={styles.actionButtonText}>Match Chat</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity style={styles.actionButton} onPress={handleViewAnalytics}>
-                <MaterialIcons name="analytics" size={24} color="#FFD700" />
-                <Text style={styles.actionButtonText}>Analytics</Text>
-              </TouchableOpacity>
-              
+            {isLive && (
               <TouchableOpacity 
                 style={styles.actionButton}
-                onPress={() => navigation.navigate('Leaderboard')}
+                onPress={() => handleOpenChat(item.id)}
               >
-                <MaterialIcons name="leaderboard" size={24} color="#FFD700" />
-                <Text style={styles.actionButtonText}>Leaderboard</Text>
+                <MaterialIcons name="chat" size={18} color="#2E7D32" />
+                <Text style={styles.actionButtonText}>Chat</Text>
               </TouchableOpacity>
-            </View>
+            )}
+            
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => handleViewAnalytics(item.id)}
+            >
+              <MaterialIcons name="analytics" size={18} color="#2E7D32" />
+              <Text style={styles.actionButtonText}>Stats</Text>
+            </TouchableOpacity>
           </View>
         </TouchableOpacity>
       </Animated.View>

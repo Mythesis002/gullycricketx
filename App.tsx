@@ -31,6 +31,7 @@ const Stack = createStackNavigator();
 function MainTabs() {
   return (
     <Tab.Navigator
+      id="MainTabs"
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: any;
@@ -101,6 +102,7 @@ function MainTabs() {
 function AppStack() {
   return (
     <Stack.Navigator
+      id="AppStack"
       screenOptions={{
         headerStyle: {
           backgroundColor: '#2E7D32',

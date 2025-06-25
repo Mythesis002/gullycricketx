@@ -44,7 +44,7 @@ export default function NotificationsScreen() {
       const allNotifications = await db?.from('notifications').getAll();
       if (allNotifications) {
         // Filter notifications for current user and sort by newest first
-        const userNotifications = allNotifications
+        const userNotifications = (allNotifications as any[])
           .filter(notification => notification.userId === user?.id)
           .sort((a, b) => b.createdAt - a.createdAt);
         setNotifications(userNotifications);
@@ -111,7 +111,7 @@ export default function NotificationsScreen() {
       case 'performance_update':
         return 'trending-up';
       case 'tournament_update':
-        return 'tournament';
+        return 'emoji-events'; // Changed from 'tournament' to valid icon
       default:
         return 'notifications';
     }

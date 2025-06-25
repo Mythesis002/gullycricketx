@@ -43,7 +43,7 @@ export default function CreateTeamScreen() {
       const users = await db?.from('users').getAll();
       if (users) {
         // Exclude current user from the list
-        const players = users
+        const players = (users as any[])
           .filter(u => u.id !== user?.id)
           .map(u => ({
             id: u.id,

@@ -46,7 +46,7 @@ export default function TournamentScreen() {
     try {
       const fetchedTournaments = await db?.from('tournaments').getAll();
       if (fetchedTournaments) {
-        const sortedTournaments = fetchedTournaments.sort((a, b) => b.createdAt - a.createdAt);
+        const sortedTournaments = (fetchedTournaments as any[]).sort((a, b) => b.createdAt - a.createdAt);
         setTournaments(sortedTournaments);
       }
     } catch (error) {

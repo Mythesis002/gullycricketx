@@ -58,7 +58,7 @@ export default function AnalyticsScreen() {
     try {
       const analytics = await db?.from('matchAnalytics').getAll();
       if (analytics) {
-        const userAnalytic = analytics.find(
+        const userAnalytic = (analytics as any[]).find(
           a => a.matchId === matchId && a.playerId === user?.id
         );
         

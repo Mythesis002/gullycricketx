@@ -47,11 +47,11 @@ export default function TeamsScreen() {
     try {
       const fetchedTeams = await db?.from('teams').getAll();
       if (fetchedTeams) {
-        const sortedTeams = fetchedTeams.sort((a, b) => b.createdAt - a.createdAt);
+        const sortedTeams = (fetchedTeams as any[]).sort((a, b) => b.createdAt - a.createdAt);
         setTeams(sortedTeams);
         
         // Filter teams where user is captain or player
-        const userTeams = sortedTeams.filter(team => {
+        const userTeams = sortedTeams.filter((team: any) => {
           const playerIds = team.playerIds ? JSON.parse(team.playerIds) : [];
           return team.captainId === user?.id || playerIds.includes(user?.id);
         });

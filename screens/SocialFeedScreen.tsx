@@ -49,7 +49,7 @@ export default function SocialFeedScreen() {
       const fetchedPosts = await db?.from('posts').getAll();
       if (fetchedPosts) {
         // Sort by newest first
-        const sortedPosts = fetchedPosts.sort((a, b) => b.createdAt - a.createdAt);
+        const sortedPosts = (fetchedPosts as any[]).sort((a, b) => b.createdAt - a.createdAt);
         setPosts(sortedPosts);
       }
     } catch (error) {

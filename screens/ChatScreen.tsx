@@ -50,7 +50,7 @@ export default function ChatScreen() {
     try {
       const allMessages = await db?.from('chatMessages').getAll();
       if (allMessages) {
-        const matchMessages = allMessages
+        const matchMessages = (allMessages as any[])
           .filter(msg => msg.matchId === matchId)
           .sort((a, b) => a.createdAt - b.createdAt);
         setMessages(matchMessages);

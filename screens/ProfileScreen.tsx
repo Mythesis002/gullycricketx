@@ -57,7 +57,7 @@ export default function ProfileScreen() {
   const fetchProfile = async () => {
     try {
       const users = await db?.from('users').getAll();
-      const userProfile = users?.find(u => u.email === user?.email);
+      const userProfile = (users as any[])?.find(u => u.email === user?.email);
       
       if (userProfile) {
         setProfile(userProfile);
@@ -118,7 +118,7 @@ export default function ProfileScreen() {
 
   const renderStatCard = (title: string, value: string | number, icon: string, color: string) => (
     <View style={[styles.statCard, { borderLeftColor: color }]}>
-      <MaterialIcons name={icon} size={24} color={color} />
+      <MaterialIcons name={icon as any} size={24} color={color} />
       <View style={styles.statContent}>
         <Text style={styles.statValue}>{value}</Text>
         <Text style={styles.statTitle}>{title}</Text>
@@ -128,7 +128,7 @@ export default function ProfileScreen() {
 
   const renderBadge = (badge: Badge) => (
     <View key={badge.id} style={styles.badge}>
-      <MaterialIcons name={badge.icon} size={20} color="#FFD700" />
+      <MaterialIcons name={badge.icon as any} size={20} color="#FFD700" />
       <Text style={styles.badgeName}>{badge.name}</Text>
     </View>
   );

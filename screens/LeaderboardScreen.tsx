@@ -50,7 +50,7 @@ export default function LeaderboardScreen() {
     try {
       const fetchedPlayers = await db?.from('users').getAll();
       if (fetchedPlayers) {
-        setPlayers(fetchedPlayers);
+        setPlayers(fetchedPlayers as any[]);
       }
     } catch (error) {
       console.error('Error fetching players:', error);
@@ -159,7 +159,7 @@ export default function LeaderboardScreen() {
     }
   };
 
-  const renderPlayer = ({ item, index }: { item: Player; index: number }) => {
+  const renderPlayer = ({ item, index }: { item: any; index: number }) => {
     const rank = index + 1;
     const rankIcon = getRankIcon(rank);
     const categoryValue = getCategoryValue(item, activeCategory);
@@ -169,7 +169,7 @@ export default function LeaderboardScreen() {
       <Animated.View style={[styles.playerCard, { opacity: fadeAnim }]}>
         <View style={styles.rankContainer}>
           <MaterialIcons 
-            name={rankIcon.name} 
+            name={rankIcon.name as any} 
             size={rank <= 3 ? 32 : 24} 
             color={rankIcon.color} 
           />

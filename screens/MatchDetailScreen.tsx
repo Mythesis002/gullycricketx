@@ -57,7 +57,7 @@ export default function MatchDetailScreen() {
     try {
       const fetchedMatch = await db?.from('matches').get(matchId);
       if (fetchedMatch) {
-        setMatch(fetchedMatch);
+        setMatch(fetchedMatch as any);
       }
     } catch (error) {
       console.error('Error fetching match details:', error);
@@ -110,15 +110,15 @@ export default function MatchDetailScreen() {
   };
 
   const handleStartToss = () => {
-    navigation.navigate('CoinToss', { matchId: match?.id });
+    (navigation as any).navigate('CoinToss', { matchId: match?.id });
   };
 
   const handleOpenChat = () => {
-    navigation.navigate('Chat', { matchId: match?.id });
+    (navigation as any).navigate('Chat', { matchId: match?.id });
   };
 
   const handleViewAnalytics = () => {
-    navigation.navigate('Analytics', { matchId: match?.id });
+    (navigation as any).navigate('Analytics', { matchId: match?.id });
   };
 
   if (loading) {
