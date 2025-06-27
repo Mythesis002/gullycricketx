@@ -219,10 +219,26 @@ export default function ProfileScreen() {
             <View style={styles.actionsContainer}>
               <TouchableOpacity 
                 style={styles.actionButton}
+                onPress={() => navigation.navigate('AppSummary')}
+              >
+                <MaterialIcons name="analytics" size={24} color="#FFD700" />
+                <Text style={styles.actionText}>App Overview</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.actionButton}
                 onPress={() => navigation.navigate('EditProfile')}
               >
                 <MaterialIcons name="edit" size={24} color="#FFD700" />
                 <Text style={styles.actionText}>Edit Profile</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={styles.actionButton}
+                onPress={() => navigation.navigate('AllPlayers')}
+              >
+                <MaterialIcons name="people" size={24} color="#FFD700" />
+                <Text style={styles.actionText}>All Players</Text>
               </TouchableOpacity>
               
               <TouchableOpacity 

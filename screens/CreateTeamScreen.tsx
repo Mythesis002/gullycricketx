@@ -40,17 +40,34 @@ export default function CreateTeamScreen() {
   const fetchPlayers = async () => {
     setLoading(true);
     try {
+      console.log('Fetching all players...');
       const users = await db?.from('users').getAll();
+      console.log('All users found:', users?.length || 0);
+      console.log('Current user email:', user?.email);
+      
       if (users) {
-        // Exclude current user from the list
+        // Show ALL players including current user for debugging, but exclude current user from selection
+        const allUsersForDebug = (users as any[]).map(u => ({
+          id: u.id,
+          name: u.name,
+          email: u.email,
+          jerseyNumber: u.jerseyNumber,
+          matchesPlayed: u.matchesPlayed || 0,
+        }));
+        
+        console.log('All users for debugging:', allUsersForDebug);
+        
+        // Exclude current user from selectable players
         const players = (users as any[])
-          .filter(u => u.id !== user?.id)
+          .filter(u => u.email !== user?.email) // Filter by email instead of ID
           .map(u => ({
             id: u.id,
             name: u.name,
             jerseyNumber: u.jerseyNumber,
             matchesPlayed: u.matchesPlayed || 0,
           }));
+          
+        console.log('Selectable players:', players);
         setAllPlayers(players);
       }
     } catch (error) {

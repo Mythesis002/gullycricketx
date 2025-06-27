@@ -49,14 +49,15 @@ export default function SocialFeedScreen() {
       console.log('Fetching posts...');
       const fetchedPosts = await db?.from('posts').getAll();
       console.log('Fetched posts:', fetchedPosts);
+      console.log('Number of posts found:', fetchedPosts?.length || 0);
       
       if (fetchedPosts && fetchedPosts.length > 0) {
-        // Sort by newest first
+        // Sort by newest first - SHOW ALL POSTS FROM ALL USERS
         const sortedPosts = (fetchedPosts as any[]).sort((a, b) => b.createdAt - a.createdAt);
         setPosts(sortedPosts);
-        console.log('Sorted posts:', sortedPosts);
+        console.log('Displaying posts from users:', sortedPosts.map(p => p.userName));
       } else {
-        console.log('No posts found');
+        console.log('No posts found in database');
         setPosts([]);
       }
     } catch (error) {
