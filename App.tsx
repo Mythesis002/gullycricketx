@@ -39,7 +39,7 @@ function MainTabs() {
       id="MainTabs"
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName: any;
+          let iconName: keyof typeof MaterialIcons.glyphMap;
 
           if (route.name === 'Feed') {
             iconName = 'home';
@@ -51,6 +51,8 @@ function MainTabs() {
             iconName = 'person';
           } else if (route.name === 'Notifications') {
             iconName = 'notifications';
+          } else {
+            iconName = 'help';
           }
 
           return <MaterialIcons name={iconName} size={size} color={color} />;
@@ -208,9 +210,22 @@ function AppContent() {
 
   const checkUserProfile = async () => {
     try {
+      console.log('=== CHECKING USER PROFILE ===');
+      console.log('Current user:', user);
+      console.log('User email:', user?.email);
+      
       const users = await db?.from('users').getAll();
+      console.log('All users in database:', users?.length || 0);
+      console.log('All user emails:', (users as any[] || []).map(u => u.email));
+      
       const userProfile = (users as any[])?.find(u => u.email === user?.email);
-      setHasProfile(!!userProfile);
+      console.log('Found user profile:', userProfile);
+      
+      const profileExists = !!userProfile;
+      setHasProfile(profileExists);
+      
+      console.log('Profile exists:', profileExists);
+      console.log('Will show:', profileExists ? 'Main App' : 'Profile Setup');
     } catch (error) {
       console.error('Error checking user profile:', error);
       setHasProfile(false);
@@ -236,9 +251,21 @@ function AppContent() {
         }}>
           Loading GullyCricketX...
         </Text>
+        <Text style={{ 
+          color: '#FFD700', 
+          fontSize: 14, 
+          marginTop: 8 
+        }}>
+          {isLoading ? 'Authenticating...' : 'Checking profile...'}
+        </Text>
       </View>
     );
   }
+
+  console.log('=== RENDERING DECISION ===');
+  console.log('isSignedIn:', isSignedIn);
+  console.log('user:', !!user);
+  console.log('hasProfile:', hasProfile);
 
   return (
     <NavigationContainer>

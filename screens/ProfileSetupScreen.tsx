@@ -254,6 +254,25 @@ export default function ProfileSetupScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+          {/* Debug Info */}
+          <View style={styles.debugContainer}>
+            <Text style={styles.debugText}>
+              👤 User: {user?.email || 'No user'}
+            </Text>
+            <TouchableOpacity 
+              style={styles.debugButton}
+              onPress={() => {
+                Alert.alert(
+                  'Debug Info',
+                  `User: ${user?.email}\nStep: ${currentStep}\nName: ${name}\nJersey: ${jerseyNumber}`,
+                  [{ text: 'OK' }]
+                );
+              }}
+            >
+              <Text style={styles.debugButtonText}>Debug Info</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.progressContainer}>
             <Text style={styles.progressText}>Step {currentStep} of 3</Text>
             <View style={styles.progressBar}>
@@ -450,5 +469,30 @@ const styles = StyleSheet.create({
     color: '#666',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  debugContainer: {
+    backgroundColor: '#FFF3E0',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#FF9800',
+  },
+  debugText: {
+    fontSize: 12,
+    color: '#E65100',
+    marginBottom: 8,
+  },
+  debugButton: {
+    backgroundColor: '#FF9800',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    alignSelf: 'flex-start',
+  },
+  debugButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
 });

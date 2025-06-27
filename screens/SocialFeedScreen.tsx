@@ -46,16 +46,25 @@ export default function SocialFeedScreen() {
 
   const fetchPosts = async () => {
     try {
-      console.log('Fetching posts...');
+      console.log('=== FETCHING POSTS ===');
+      console.log('Current user:', user?.email);
+      
       const fetchedPosts = await db?.from('posts').getAll();
-      console.log('Fetched posts:', fetchedPosts);
+      console.log('Raw posts from database:', fetchedPosts);
       console.log('Number of posts found:', fetchedPosts?.length || 0);
       
       if (fetchedPosts && fetchedPosts.length > 0) {
+        console.log('Posts details:', (fetchedPosts as any[]).map(p => ({
+          id: p.id,
+          userName: p.userName,
+          text: p.text?.substring(0, 50),
+          createdAt: new Date(p.createdAt).toLocaleString()
+        })));
+        
         // Sort by newest first - SHOW ALL POSTS FROM ALL USERS
         const sortedPosts = (fetchedPosts as any[]).sort((a, b) => b.createdAt - a.createdAt);
         setPosts(sortedPosts);
-        console.log('Displaying posts from users:', sortedPosts.map(p => p.userName));
+        console.log('Posts set successfully, displaying', sortedPosts.length, 'posts');
       } else {
         console.log('No posts found in database');
         setPosts([]);

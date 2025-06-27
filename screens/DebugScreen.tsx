@@ -64,6 +64,94 @@ export default function DebugScreen() {
     );
   };
 
+  const createTestData = async () => {
+    Alert.alert(
+      'Create Test Data',
+      'This will create sample users and posts for testing. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Create',
+          onPress: async () => {
+            try {
+              // Create test users
+              const testUsers = [
+                {
+                  name: 'Virat Kohli',
+                  email: 'virat@test.com',
+                  jerseyNumber: '18',
+                  bio: 'Captain and aggressive batsman',
+                  matchesPlayed: 15,
+                  totalRuns: 850,
+                  totalWickets: 2,
+                  battingAverage: 56.7,
+                  strikeRate: 135.2,
+                  bowlingAverage: 0,
+                  economyRate: 0,
+                  badges: '["century", "motm"]',
+                  createdAt: Date.now() - 86400000,
+                },
+                {
+                  name: 'MS Dhoni',
+                  email: 'dhoni@test.com',
+                  jerseyNumber: '7',
+                  bio: 'Wicket keeper and finisher',
+                  matchesPlayed: 20,
+                  totalRuns: 720,
+                  totalWickets: 0,
+                  battingAverage: 48.0,
+                  strikeRate: 120.5,
+                  bowlingAverage: 0,
+                  economyRate: 0,
+                  badges: '["teamspirit"]',
+                  createdAt: Date.now() - 172800000,
+                }
+              ];
+
+              for (const testUser of testUsers) {
+                await db?.from('users').add(testUser);
+              }
+
+              // Create test posts
+              const testPosts = [
+                {
+                  userId: 'test1',
+                  userName: 'Virat Kohli',
+                  jerseyNumber: '18',
+                  text: 'Just scored a century in today\'s match! What a game! 🏏💯',
+                  imageUrl: '',
+                  likes: 25,
+                  comments: '[]',
+                  createdAt: Date.now() - 3600000,
+                },
+                {
+                  userId: 'test2',
+                  userName: 'MS Dhoni',
+                  jerseyNumber: '7',
+                  text: 'Great team effort today. Cricket is all about teamwork! 👏',
+                  imageUrl: '',
+                  likes: 18,
+                  comments: '[]',
+                  createdAt: Date.now() - 7200000,
+                }
+              ];
+
+              for (const testPost of testPosts) {
+                await db?.from('posts').add(testPost);
+              }
+
+              fetchData();
+              Alert.alert('Success', 'Test data created successfully!');
+            } catch (error) {
+              console.error('Error creating test data:', error);
+              Alert.alert('Error', 'Failed to create test data');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
@@ -115,6 +203,11 @@ export default function DebugScreen() {
         <TouchableOpacity style={styles.refreshButton} onPress={fetchData}>
           <MaterialIcons name="refresh" size={20} color="#1B5E20" />
           <Text style={styles.refreshButtonText}>Refresh Data</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.testButton} onPress={createTestData}>
+          <MaterialIcons name="science" size={20} color="#1B5E20" />
+          <Text style={styles.testButtonText}>Create Test Data</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -199,6 +292,20 @@ const styles = StyleSheet.create({
   },
   refreshButtonText: {
     color: '#1B5E20',
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  testButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#4CAF50',
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  testButtonText: {
+    color: '#FFFFFF',
     fontWeight: 'bold',
     marginLeft: 8,
   },

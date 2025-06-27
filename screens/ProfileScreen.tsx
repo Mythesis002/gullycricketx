@@ -56,15 +56,31 @@ export default function ProfileScreen() {
 
   const fetchProfile = async () => {
     try {
+      console.log('Fetching profile for user:', user?.email);
       const users = await db?.from('users').getAll();
-      const userProfile = (users as any[])?.find(u => u.email === user?.email);
+      console.log('All users found:', users?.length || 0);
+      console.log('Looking for user with email:', user?.email);
       
-      if (userProfile) {
-        setProfile(userProfile);
+      if (users && users.length > 0) {
+        console.log('All user emails:', (users as any[]).map(u => u.email));
+        const userProfile = (users as any[])?.find(u => u.email === user?.email);
+        console.log('Found user profile:', userProfile);
+        
+        if (userProfile) {
+          setProfile(userProfile);
+          console.log('Profile set successfully');
+        } else {
+          console.log('No profile found for current user');
+          setProfile(null);
+        }
+      } else {
+        console.log('No users found in database');
+        setProfile(null);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
       Alert.alert('Error', 'Failed to load profile');
+      setProfile(null);
     } finally {
       setLoading(false);
       setRefreshing(false);
