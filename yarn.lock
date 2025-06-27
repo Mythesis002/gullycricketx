@@ -3578,6 +3578,11 @@ expo-linking@~7.1.3, expo-linking@~7.1.5:
     expo-constants "~17.1.6"
     invariant "^2.2.4"
 
+expo-location@~18.1.5:
+  version "18.1.5"
+  resolved "https://registry.yarnpkg.com/expo-location/-/expo-location-18.1.5.tgz#c809b88ca26d47b254c24a5a09dea6ec8039bda2"
+  integrity sha512-/ugxS4Ort9DbKD0Do6xn4TjeHaA/by5vv0p0PrY5Zbcez1S0AfrQn/4JG/8PLT2imngMwZU9TDKrgxqJQ4RuPQ==
+
 expo-modules-autolinking@2.1.12:
   version "2.1.12"
   resolved "https://registry.yarnpkg.com/expo-modules-autolinking/-/expo-modules-autolinking-2.1.12.tgz#f7f04f143411e04fefc6c4585e69fd0f6ea953fa"
