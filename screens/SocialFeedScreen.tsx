@@ -13,8 +13,6 @@ import {
   ActivityIndicator,
   TextInput,
   Modal,
-  PanGestureHandler,
-  State,
   Pressable,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -23,9 +21,7 @@ import { useBasic } from '@basictech/expo';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const POSTS_PER_PAGE = 10;
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface Post {
   id: string;
@@ -59,17 +55,8 @@ interface User {
   isFollowing?: boolean;
 }
 
-interface Comment {
-  id: string;
-  userId: string;
-  userName: string;
-  text: string;
-  createdAt: number;
-  likes: number;
-}
-
 export default function SocialFeedScreen() {
-  const { db, user } = useBasic();
+  const { db } = useBasic();
   const navigation = useNavigation<any>();
   
   // Core state
@@ -77,7 +64,6 @@ export default function SocialFeedScreen() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
   
   // Filter and search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -95,35 +81,29 @@ export default function SocialFeedScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const searchAnim = useRef(new Animated.Value(0)).current;
 
-  useEffect(() => {
-    initializeFeed();
-    startFadeAnimation();
-  }, []);
-
-  useFocusEffect(
-    useCallback(() => {
-      fetchPosts();
-    }, [])
-  );
-
-  const startFadeAnimation = () => {
+  const startFadeAnimation = useCallback(() => {
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 800,
       useNativeDriver: true,
     }).start();
-  };
+  }, [fadeAnim]);
 
-  const initializeFeed = async () => {
+  const initializeFeed = useCallback(async () => {
     try {
       await fetchPosts();
     } catch (error) {
       console.error('❌ Error initializing feed:', error);
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchPosts = async (isRefresh = false) => {
+  useEffect(() => {
+    initializeFeed();
+    startFadeAnimation();
+  }, [initializeFeed, startFadeAnimation]);
+
+  const fetchPosts = useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) {
         setRefreshing(true);
@@ -143,7 +123,7 @@ export default function SocialFeedScreen() {
         
         const enrichedPosts = (fetchedPosts as any[])
           .map(post => enrichPost(post, usersMap))
-          .sort((a, b) => calculatePostScore(b) - calculatePostScore(a)); // Smart ordering
+          .sort((a, b) => calculatePostScore(b) - calculatePostScore(a));
 
         setPosts(enrichedPosts);
         setUsers(fetchedUsers as any[]);
@@ -157,7 +137,13 @@ export default function SocialFeedScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [db, refreshing]);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchPosts();
+    }, [fetchPosts])
+  );
 
   const enrichPost = (post: any, usersMap: Map<string, any>): Post => {
     const postUser = usersMap.get(post.userId);
@@ -165,19 +151,17 @@ export default function SocialFeedScreen() {
     return {
       ...post,
       userName: post.userName || postUser?.name || 'Unknown Player',
-      userAvatar: postUser?.avatar || '',
+      userAvatar: postUser?.profilePicture || '',
       jerseyNumber: post.jerseyNumber || postUser?.jerseyNumber || '00',
       isLiked: likedPosts.has(post.id),
       isBookmarked: bookmarkedPosts.has(post.id),
-      hashtags: extractHashtags(post.text || ''),
-      postType: determinePostType(post),
+      hashtags: post.hashtags ? JSON.parse(post.hashtags) : [],
+      postType: post.postType || (post.imageUrl ? 'image' : 'text'),
+      videoUrl: post.videoUrl || '',
+      shares: post.shares || 0,
+      location: post.location || '',
+      taggedPlayers: post.taggedPlayers ? JSON.parse(post.taggedPlayers) : [],
     };
-  };
-
-  const determinePostType = (post: any): 'text' | 'image' | 'video' | 'reel' => {
-    if (post.videoUrl) return post.isReel ? 'reel' : 'video';
-    if (post.imageUrl) return 'image';
-    return 'text';
   };
 
   const calculatePostScore = (post: Post): number => {
@@ -185,13 +169,7 @@ export default function SocialFeedScreen() {
     const ageHours = (now - post.createdAt) / (1000 * 60 * 60);
     const engagementScore = post.likes + (getCommentsCount(post) * 2) + (post.shares * 3);
     
-    // Decay score over time, but boost highly engaged content
     return engagementScore / Math.pow(ageHours + 1, 0.5);
-  };
-
-  const extractHashtags = (text: string): string[] => {
-    const hashtagRegex = /#[\w]+/g;
-    return text.match(hashtagRegex) || [];
   };
 
   const getCommentsCount = (post: Post): number => {
@@ -233,20 +211,6 @@ export default function SocialFeedScreen() {
     return filtered;
   }, [posts, users, selectedTab, searchQuery]);
 
-  // Interaction handlers
-  const handleDoubleTapLike = async (post: Post) => {
-    if (!post.isLiked) {
-      await handleLike(post.id, post.likes);
-      
-      // Heart animation
-      const heartAnim = new Animated.Value(0);
-      Animated.sequence([
-        Animated.timing(heartAnim, { toValue: 1, duration: 200, useNativeDriver: true }),
-        Animated.timing(heartAnim, { toValue: 0, duration: 200, useNativeDriver: true })
-      ]).start();
-    }
-  };
-
   const handleLike = async (postId: string, currentLikes: number) => {
     try {
       const isCurrentlyLiked = likedPosts.has(postId);
@@ -275,6 +239,12 @@ export default function SocialFeedScreen() {
     } catch (error) {
       console.error('❌ Error liking post:', error);
       fetchPosts();
+    }
+  };
+
+  const handleDoubleTapLike = async (post: Post) => {
+    if (!post.isLiked) {
+      await handleLike(post.id, post.likes);
     }
   };
 

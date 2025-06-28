@@ -1,124 +1,382 @@
 export const schema = {
-  project_id: "ed2d765b-98bc-43ad-a0b0-05eb9e6bfed9",
-  version: 1,
-  tables: {
-    users: {
-      type: 'collection' as const,
-      fields: {
-        name: { type: 'string' as const, indexed: true },
-        email: { type: 'string' as const, indexed: true },
-        jerseyNumber: { type: 'string' as const, indexed: true },
-        profilePicture: { type: 'string' as const, indexed: true },
-        bio: { type: 'string' as const, indexed: true },
-        matchesPlayed: { type: 'number' as const, indexed: true },
-        totalRuns: { type: 'number' as const, indexed: true },
-        totalWickets: { type: 'number' as const, indexed: true },
-        battingAverage: { type: 'number' as const, indexed: true },
-        strikeRate: { type: 'number' as const, indexed: true },
-        bowlingAverage: { type: 'number' as const, indexed: true },
-        economyRate: { type: 'number' as const, indexed: true },
-        badges: { type: 'string' as const, indexed: true },
-        createdAt: { type: 'number' as const, indexed: true }
+  "tables": {
+    "posts": {
+      "type": "collection",
+      "fields": {
+        "text": {
+          "type": "string",
+          "indexed": true
+        },
+        "likes": {
+          "type": "number",
+          "indexed": true
+        },
+        "userId": {
+          "type": "string",
+          "indexed": true
+        },
+        "comments": {
+          "type": "string",
+          "indexed": true
+        },
+        "imageUrl": {
+          "type": "string",
+          "indexed": true
+        },
+        "userName": {
+          "type": "string",
+          "indexed": true
+        },
+        "createdAt": {
+          "type": "number",
+          "indexed": true
+        },
+        "jerseyNumber": {
+          "type": "string",
+          "indexed": true
+        },
+        "videoUrl": {
+          "type": "string",
+          "indexed": true
+        },
+        "postType": {
+          "type": "string",
+          "indexed": true
+        },
+        "shares": {
+          "type": "number",
+          "indexed": true
+        },
+        "location": {
+          "type": "string",
+          "indexed": true
+        },
+        "hashtags": {
+          "type": "string",
+          "indexed": true
+        },
+        "taggedPlayers": {
+          "type": "string",
+          "indexed": true
+        }
       }
     },
-    posts: {
-      type: 'collection' as const,
-      fields: {
-        userId: { type: 'string' as const, indexed: true },
-        userName: { type: 'string' as const, indexed: true },
-        jerseyNumber: { type: 'string' as const, indexed: true },
-        text: { type: 'string' as const, indexed: true },
-        imageUrl: { type: 'string' as const, indexed: true },
-        likes: { type: 'number' as const, indexed: true },
-        comments: { type: 'string' as const, indexed: true },
-        createdAt: { type: 'number' as const, indexed: true }
+    "teams": {
+      "type": "collection",
+      "fields": {
+        "name": {
+          "type": "string",
+          "indexed": true
+        },
+        "captainId": {
+          "type": "string",
+          "indexed": true
+        },
+        "createdAt": {
+          "type": "number",
+          "indexed": true
+        },
+        "playerIds": {
+          "type": "string",
+          "indexed": true
+        },
+        "captainName": {
+          "type": "string",
+          "indexed": true
+        },
+        "playerNames": {
+          "type": "string",
+          "indexed": true
+        }
       }
     },
-    teams: {
-      type: 'collection' as const,
-      fields: {
-        name: { type: 'string' as const, indexed: true },
-        captainId: { type: 'string' as const, indexed: true },
-        captainName: { type: 'string' as const, indexed: true },
-        playerIds: { type: 'string' as const, indexed: true },
-        playerNames: { type: 'string' as const, indexed: true },
-        createdAt: { type: 'number' as const, indexed: true }
+    "users": {
+      "type": "collection",
+      "fields": {
+        "bio": {
+          "type": "string",
+          "indexed": true
+        },
+        "name": {
+          "type": "string",
+          "indexed": true
+        },
+        "email": {
+          "type": "string",
+          "indexed": true
+        },
+        "badges": {
+          "type": "string",
+          "indexed": true
+        },
+        "createdAt": {
+          "type": "number",
+          "indexed": true
+        },
+        "totalRuns": {
+          "type": "number",
+          "indexed": true
+        },
+        "strikeRate": {
+          "type": "number",
+          "indexed": true
+        },
+        "economyRate": {
+          "type": "number",
+          "indexed": true
+        },
+        "jerseyNumber": {
+          "type": "string",
+          "indexed": true
+        },
+        "totalWickets": {
+          "type": "number",
+          "indexed": true
+        },
+        "matchesPlayed": {
+          "type": "number",
+          "indexed": true
+        },
+        "battingAverage": {
+          "type": "number",
+          "indexed": true
+        },
+        "bowlingAverage": {
+          "type": "number",
+          "indexed": true
+        },
+        "profilePicture": {
+          "type": "string",
+          "indexed": true
+        }
       }
     },
-    matches: {
-      type: 'collection' as const,
-      fields: {
-        teamAId: { type: 'string' as const, indexed: true },
-        teamBId: { type: 'string' as const, indexed: true },
-        teamAName: { type: 'string' as const, indexed: true },
-        teamBName: { type: 'string' as const, indexed: true },
-        date: { type: 'string' as const, indexed: true },
-        time: { type: 'string' as const, indexed: true },
-        venue: { type: 'string' as const, indexed: true },
-        format: { type: 'string' as const, indexed: true },
-        status: { type: 'string' as const, indexed: true },
-        tossWinner: { type: 'string' as const, indexed: true },
-        tossDecision: { type: 'string' as const, indexed: true },
-        currentScore: { type: 'string' as const, indexed: true },
-        currentOvers: { type: 'string' as const, indexed: true },
-        battingTeam: { type: 'string' as const, indexed: true },
-        createdAt: { type: 'number' as const, indexed: true }
+    "matches": {
+      "type": "collection",
+      "fields": {
+        "date": {
+          "type": "string",
+          "indexed": true
+        },
+        "time": {
+          "type": "string",
+          "indexed": true
+        },
+        "venue": {
+          "type": "string",
+          "indexed": true
+        },
+        "format": {
+          "type": "string",
+          "indexed": true
+        },
+        "status": {
+          "type": "string",
+          "indexed": true
+        },
+        "teamAId": {
+          "type": "string",
+          "indexed": true
+        },
+        "teamBId": {
+          "type": "string",
+          "indexed": true
+        },
+        "createdAt": {
+          "type": "number",
+          "indexed": true
+        },
+        "teamAName": {
+          "type": "string",
+          "indexed": true
+        },
+        "teamBName": {
+          "type": "string",
+          "indexed": true
+        },
+        "tossWinner": {
+          "type": "string",
+          "indexed": true
+        },
+        "battingTeam": {
+          "type": "string",
+          "indexed": true
+        },
+        "currentOvers": {
+          "type": "string",
+          "indexed": true
+        },
+        "currentScore": {
+          "type": "string",
+          "indexed": true
+        },
+        "tossDecision": {
+          "type": "string",
+          "indexed": true
+        }
       }
     },
-    matchAnalytics: {
-      type: 'collection' as const,
-      fields: {
-        matchId: { type: 'string' as const, indexed: true },
-        playerId: { type: 'string' as const, indexed: true },
-        playerName: { type: 'string' as const, indexed: true },
-        runs: { type: 'number' as const, indexed: true },
-        ballsFaced: { type: 'number' as const, indexed: true },
-        fours: { type: 'number' as const, indexed: true },
-        sixes: { type: 'number' as const, indexed: true },
-        wickets: { type: 'number' as const, indexed: true },
-        oversBowled: { type: 'number' as const, indexed: true },
-        runsConceded: { type: 'number' as const, indexed: true },
-        status: { type: 'string' as const, indexed: true },
-        captainAApproval: { type: 'boolean' as const, indexed: true },
-        captainBApproval: { type: 'boolean' as const, indexed: true },
-        createdAt: { type: 'number' as const, indexed: true }
+    "tournaments": {
+      "type": "collection",
+      "fields": {
+        "name": {
+          "type": "string",
+          "indexed": true
+        },
+        "format": {
+          "type": "string",
+          "indexed": true
+        },
+        "status": {
+          "type": "string",
+          "indexed": true
+        },
+        "teamIds": {
+          "type": "string",
+          "indexed": true
+        },
+        "matchIds": {
+          "type": "string",
+          "indexed": true
+        },
+        "createdAt": {
+          "type": "number",
+          "indexed": true
+        },
+        "creatorId": {
+          "type": "string",
+          "indexed": true
+        },
+        "standings": {
+          "type": "string",
+          "indexed": true
+        }
       }
     },
-    chatMessages: {
-      type: 'collection' as const,
-      fields: {
-        matchId: { type: 'string' as const, indexed: true },
-        userId: { type: 'string' as const, indexed: true },
-        userName: { type: 'string' as const, indexed: true },
-        jerseyNumber: { type: 'string' as const, indexed: true },
-        message: { type: 'string' as const, indexed: true },
-        imageUrl: { type: 'string' as const, indexed: true },
-        createdAt: { type: 'number' as const, indexed: true }
+    "chatMessages": {
+      "type": "collection",
+      "fields": {
+        "userId": {
+          "type": "string",
+          "indexed": true
+        },
+        "matchId": {
+          "type": "string",
+          "indexed": true
+        },
+        "message": {
+          "type": "string",
+          "indexed": true
+        },
+        "imageUrl": {
+          "type": "string",
+          "indexed": true
+        },
+        "userName": {
+          "type": "string",
+          "indexed": true
+        },
+        "createdAt": {
+          "type": "number",
+          "indexed": true
+        },
+        "jerseyNumber": {
+          "type": "string",
+          "indexed": true
+        }
       }
     },
-    tournaments: {
-      type: 'collection' as const,
-      fields: {
-        name: { type: 'string' as const, indexed: true },
-        creatorId: { type: 'string' as const, indexed: true },
-        format: { type: 'string' as const, indexed: true },
-        teamIds: { type: 'string' as const, indexed: true },
-        matchIds: { type: 'string' as const, indexed: true },
-        standings: { type: 'string' as const, indexed: true },
-        status: { type: 'string' as const, indexed: true },
-        createdAt: { type: 'number' as const, indexed: true }
+    "notifications": {
+      "type": "collection",
+      "fields": {
+        "read": {
+          "type": "boolean",
+          "indexed": true
+        },
+        "type": {
+          "type": "string",
+          "indexed": true
+        },
+        "title": {
+          "type": "string",
+          "indexed": true
+        },
+        "userId": {
+          "type": "string",
+          "indexed": true
+        },
+        "message": {
+          "type": "string",
+          "indexed": true
+        },
+        "createdAt": {
+          "type": "number",
+          "indexed": true
+        }
       }
     },
-    notifications: {
-      type: 'collection' as const,
-      fields: {
-        userId: { type: 'string' as const, indexed: true },
-        title: { type: 'string' as const, indexed: true },
-        message: { type: 'string' as const, indexed: true },
-        type: { type: 'string' as const, indexed: true },
-        read: { type: 'boolean' as const, indexed: true },
-        createdAt: { type: 'number' as const, indexed: true }
+    "matchAnalytics": {
+      "type": "collection",
+      "fields": {
+        "runs": {
+          "type": "number",
+          "indexed": true
+        },
+        "fours": {
+          "type": "number",
+          "indexed": true
+        },
+        "sixes": {
+          "type": "number",
+          "indexed": true
+        },
+        "status": {
+          "type": "string",
+          "indexed": true
+        },
+        "matchId": {
+          "type": "string",
+          "indexed": true
+        },
+        "wickets": {
+          "type": "number",
+          "indexed": true
+        },
+        "playerId": {
+          "type": "string",
+          "indexed": true
+        },
+        "createdAt": {
+          "type": "number",
+          "indexed": true
+        },
+        "ballsFaced": {
+          "type": "number",
+          "indexed": true
+        },
+        "playerName": {
+          "type": "string",
+          "indexed": true
+        },
+        "oversBowled": {
+          "type": "number",
+          "indexed": true
+        },
+        "runsConceded": {
+          "type": "number",
+          "indexed": true
+        },
+        "captainAApproval": {
+          "type": "boolean",
+          "indexed": true
+        },
+        "captainBApproval": {
+          "type": "boolean",
+          "indexed": true
+        }
       }
     }
-  }
+  },
+  "version": 2,
+  "project_id": "ed2d765b-98bc-43ad-a0b0-05eb9e6bfed9"
 };
