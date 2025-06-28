@@ -575,11 +575,11 @@ const PostCard = React.memo<{
             <View style={styles.metaRow}>
               <Text style={styles.timeAgo}>{formatTimeAgo(post.createdAt)}</Text>
               {post.location && (
-                <>
+                <View style={styles.locationContainer}>
                   <Text style={styles.separator}>•</Text>
                   <MaterialIcons name="location-on" size={12} color="#666" />
-                  <Text style={styles.location}>{post.location}</Text>
-                </>
+                  <Text style={styles.locationText}>{post.location}</Text>
+                </View>
               )}
             </View>
           </View>
@@ -972,10 +972,19 @@ const styles = StyleSheet.create({
     color: '#666',
     marginHorizontal: 4,
   },
-  location: {
+  locationText: {
     fontSize: 12,
     color: '#666',
-    marginLeft: 2,
+    marginLeft: 4,
+  },
+  locationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  achievementsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
   },
   moreButton: {
     padding: 4,

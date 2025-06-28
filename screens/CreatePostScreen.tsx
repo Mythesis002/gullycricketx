@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
   hashtagContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    marginHorizontal: -4,
   },
   hashtagChip: {
     backgroundColor: '#F5F5F5',
@@ -442,6 +442,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: '#E0E0E0',
+    margin: 4,
   },
   selectedHashtagChip: {
     backgroundColor: '#FFD700',
