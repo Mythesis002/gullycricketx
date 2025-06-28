@@ -1,334 +1,380 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  Alert,
   Animated,
   Dimensions,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useBasic } from '@basictech/expo';
-import { useRoute, useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 
-const { width } = Dimensions.get('window');
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+interface RouteParams {
+  matchId: string;
+  teamA: string;
+  teamB: string;
+  onTossComplete?: (result: { winner: string; decision: 'bat' | 'bowl' }) => void;
+}
 
 export default function CoinTossScreen() {
-  const { db } = useBasic();
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
   const route = useRoute();
-  const { matchId } = route.params as { matchId: string };
+  const params = route.params as RouteParams;
   
-  const [selectedCall, setSelectedCall] = useState<'heads' | 'tails' | null>(null);
-  const [tossResult, setTossResult] = useState<'heads' | 'tails' | null>(null);
-  const [winner, setWinner] = useState<string | null>(null);
-  const [decision, setDecision] = useState<'bat' | 'bowl' | null>(null);
   const [isFlipping, setIsFlipping] = useState(false);
-  const [showResult, setShowResult] = useState(false);
-  const [match, setMatch] = useState<any>(null);
+  const [tossResult, setTossResult] = useState<{ winner: string; decision: 'bat' | 'bowl' } | null>(null);
+  const [selectedDecision, setSelectedDecision] = useState<'bat' | 'bowl'>('bat');
   
-  const coinRotation = useRef(new Animated.Value(0)).current;
+  // Animation refs
+  const coinRotateX = useRef(new Animated.Value(0)).current;
+  const coinRotateY = useRef(new Animated.Value(0)).current;
   const coinScale = useRef(new Animated.Value(1)).current;
-  const resultOpacity = useRef(new Animated.Value(0)).current;
+  const coinOpacity = useRef(new Animated.Value(1)).current;
+  const sparkleAnim = useRef(new Animated.Value(0)).current;
+  const resultAnim = useRef(new Animated.Value(0)).current;
 
-  React.useEffect(() => {
-    fetchMatchDetails();
-  }, []);
-
-  const fetchMatchDetails = async () => {
-    try {
-      const fetchedMatch = await db?.from('matches').get(matchId);
-      if (fetchedMatch) {
-        setMatch(fetchedMatch);
-      }
-    } catch (error) {
-      console.error('Error fetching match:', error);
-      Alert.alert('Error', 'Failed to load match details');
-    }
-  };
-
-  const flipCoin = () => {
-    if (!selectedCall) {
-      Alert.alert('Select Your Call', 'Please choose Heads or Tails before flipping the coin.');
-      return;
-    }
-
-    setIsFlipping(true);
-    setShowResult(false);
-    
-    // Reset animations
-    coinRotation.setValue(0);
-    coinScale.setValue(1);
-    resultOpacity.setValue(0);
-
-    // Coin flip animation
-    Animated.sequence([
-      // Scale up and start spinning
-      Animated.parallel([
-        Animated.timing(coinScale, {
-          toValue: 1.5,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(coinRotation, {
-          toValue: 10, // 10 full rotations
+  useEffect(() => {
+    // Initial coin animation
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(coinRotateY, {
+          toValue: 1,
           duration: 2000,
           useNativeDriver: true,
         }),
-      ]),
-      // Scale back down
-      Animated.timing(coinScale, {
-        toValue: 1,
-        duration: 300,
+        Animated.timing(coinRotateY, {
+          toValue: 0,
+          duration: 2000,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  const performCoinToss = () => {
+    if (isFlipping) return;
+    
+    setIsFlipping(true);
+    setTossResult(null);
+
+    // Reset animations
+    coinRotateX.setValue(0);
+    coinScale.setValue(1);
+    sparkleAnim.setValue(0);
+    resultAnim.setValue(0);
+
+    // Complex 3D flip animation
+    const flipAnimation = Animated.parallel([
+      // Main flip rotation
+      Animated.timing(coinRotateX, {
+        toValue: 10, // 10 full rotations
+        duration: 2000,
         useNativeDriver: true,
       }),
-    ]).start(() => {
-      // Determine result
-      const result = Math.random() < 0.5 ? 'heads' : 'tails';
-      setTossResult(result);
-      
+      // Y-axis rotation for 3D effect
+      Animated.timing(coinRotateY, {
+        toValue: 5,
+        duration: 2000,
+        useNativeDriver: true,
+      }),
+      // Scale animation for depth
+      Animated.sequence([
+        Animated.timing(coinScale, {
+          toValue: 1.5,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(coinScale, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+        }),
+      ]),
+      // Opacity pulse
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(coinOpacity, {
+            toValue: 0.7,
+            duration: 100,
+            useNativeDriver: true,
+          }),
+          Animated.timing(coinOpacity, {
+            toValue: 1,
+            duration: 100,
+            useNativeDriver: true,
+          }),
+        ]),
+        { iterations: 10 }
+      ),
+    ]);
+
+    flipAnimation.start(() => {
       // Determine winner
-      const isWinner = selectedCall === result;
-      setWinner(isWinner ? 'You' : 'Opponent');
+      const winner = Math.random() > 0.5 ? params.teamA : params.teamB;
+      setTossResult({ winner, decision: selectedDecision });
       
-      setIsFlipping(false);
-      setShowResult(true);
-      
-      // Show result animation
-      Animated.timing(resultOpacity, {
+      // Sparkle effect
+      Animated.timing(sparkleAnim, {
         toValue: 1,
         duration: 500,
         useNativeDriver: true,
       }).start();
+
+      // Result animation
+      Animated.spring(resultAnim, {
+        toValue: 1,
+        tension: 100,
+        friction: 8,
+        useNativeDriver: true,
+      }).start();
+
+      setIsFlipping(false);
     });
   };
 
-  const handleDecision = async (choice: 'bat' | 'bowl') => {
-    setDecision(choice);
+  const confirmToss = () => {
+    if (!tossResult) return;
+
+    const finalResult = { ...tossResult, decision: selectedDecision };
     
-    try {
-      // Update match with toss result
-      const tossWinner = winner === 'You' ? match?.teamAName : match?.teamBName;
-      const tossDecision = choice === 'bat' ? 'bat first' : 'bowl first';
-      
-      await db?.from('matches').update(matchId, {
-        tossWinner: tossWinner,
-        tossDecision: tossDecision,
-        status: 'ready_to_start'
-      });
-
-      // Send notifications
-      const notifications = [
-        {
-          userId: match?.teamAId,
-          title: 'Toss Result! 🪙',
-          message: `${tossWinner} won the toss and chose to ${tossDecision}. Match is ready to begin!`,
-          type: 'toss_result',
-          read: false,
-          createdAt: Date.now(),
-        },
-        {
-          userId: match?.teamBId,
-          title: 'Toss Result! 🪙',
-          message: `${tossWinner} won the toss and chose to ${tossDecision}. Match is ready to begin!`,
-          type: 'toss_result',
-          read: false,
-          createdAt: Date.now(),
-        }
-      ];
-
-      for (const notification of notifications) {
-        await db?.from('notifications').add(notification);
-      }
-
-      Alert.alert(
-        'Toss Complete! 🎉',
-        `${tossWinner} won the toss and chose to ${tossDecision}. Good luck with the match!`,
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
-      );
-    } catch (error) {
-      console.error('Error updating toss result:', error);
-      Alert.alert('Error', 'Failed to save toss result');
+    if (params.onTossComplete) {
+      params.onTossComplete(finalResult);
     }
+
+    Alert.alert(
+      'Toss Complete! 🏏',
+      `${finalResult.winner} wins the toss and chooses to ${finalResult.decision} first!`,
+      [
+        {
+          text: 'Start Match',
+          onPress: () => navigation.goBack(),
+        },
+      ]
+    );
   };
 
-  const resetToss = () => {
-    setSelectedCall(null);
-    setTossResult(null);
-    setWinner(null);
-    setDecision(null);
-    setShowResult(false);
-    coinRotation.setValue(0);
-    coinScale.setValue(1);
-    resultOpacity.setValue(0);
-  };
+  const renderSparkles = () => {
+    const sparkles = Array.from({ length: 8 }, (_, i) => (
+      <Animated.View
+        key={i}
+        style={[
+          styles.sparkle,
+          {
+            transform: [
+              {
+                rotate: sparkleAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['0deg', `${i * 45}deg`],
+                }),
+              },
+              {
+                translateX: sparkleAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 50],
+                }),
+              },
+            ],
+            opacity: sparkleAnim.interpolate({
+              inputRange: [0, 0.5, 1],
+              outputRange: [0, 1, 0],
+            }),
+          },
+        ]}
+      >
+        <MaterialIcons name="star" size={16} color="#FFD700" />
+      </Animated.View>
+    ));
 
-  const coinRotationInterpolate = coinRotation.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
+    return <View style={styles.sparkleContainer}>{sparkles}</View>;
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <MaterialIcons name="monetization-on" size={32} color="#FFD700" />
-          <Text style={styles.headerTitle}>Cricket Toss</Text>
-          <Text style={styles.headerSubtitle}>
-            {match ? `${match.teamAName} vs ${match.teamBName}` : 'Loading...'}
-          </Text>
-        </View>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Coin Toss</Text>
+        <View style={{ width: 24 }} />
+      </View>
 
-        {/* Coin */}
-        <View style={styles.coinContainer}>
+      {/* Teams Display */}
+      <View style={styles.teamsContainer}>
+        <View style={styles.teamCard}>
+          <Text style={styles.teamName}>{params.teamA}</Text>
+          <MaterialIcons name="sports-cricket" size={32} color="#FFD700" />
+        </View>
+        
+        <Text style={styles.vsText}>VS</Text>
+        
+        <View style={styles.teamCard}>
+          <Text style={styles.teamName}>{params.teamB}</Text>
+          <MaterialIcons name="sports-cricket" size={32} color="#FFD700" />
+        </View>
+      </View>
+
+      {/* Coin Animation Area */}
+      <View style={styles.coinArea}>
+        <Animated.View
+          style={[
+            styles.coinContainer,
+            {
+              transform: [
+                {
+                  rotateX: coinRotateX.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0deg', '360deg'],
+                  }),
+                },
+                {
+                  rotateY: coinRotateY.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: ['0deg', '360deg'],
+                  }),
+                },
+                { scale: coinScale },
+              ],
+              opacity: coinOpacity,
+            },
+          ]}
+        >
+          <View style={styles.coin}>
+            <MaterialIcons name="monetization-on" size={120} color="#FFD700" />
+          </View>
+        </Animated.View>
+
+        {/* Sparkles */}
+        {renderSparkles()}
+
+        {/* Toss Result */}
+        {tossResult && (
           <Animated.View
             style={[
-              styles.coin,
+              styles.resultContainer,
               {
                 transform: [
-                  { rotate: coinRotationInterpolate },
-                  { scale: coinScale },
+                  {
+                    scale: resultAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0, 1],
+                    }),
+                  },
                 ],
+                opacity: resultAnim,
               },
             ]}
           >
-            <MaterialIcons 
-              name="monetization-on" 
-              size={120} 
-              color="#FFD700" 
-            />
+            <Text style={styles.winnerText}>{tossResult.winner}</Text>
+            <Text style={styles.winnerSubtext}>wins the toss!</Text>
           </Animated.View>
-        </View>
-
-        {/* Call Selection */}
-        {!showResult && (
-          <View style={styles.callSection}>
-            <Text style={styles.callTitle}>Make Your Call</Text>
-            <View style={styles.callButtons}>
-              <TouchableOpacity
-                style={[
-                  styles.callButton,
-                  selectedCall === 'heads' && styles.selectedCall
-                ]}
-                onPress={() => setSelectedCall('heads')}
-              >
-                <MaterialIcons 
-                  name="face" 
-                  size={32} 
-                  color={selectedCall === 'heads' ? '#1B5E20' : '#FFD700'} 
-                />
-                <Text style={[
-                  styles.callButtonText,
-                  selectedCall === 'heads' && styles.selectedCallText
-                ]}>
-                  HEADS
-                </Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[
-                  styles.callButton,
-                  selectedCall === 'tails' && styles.selectedCall
-                ]}
-                onPress={() => setSelectedCall('tails')}
-              >
-                <MaterialIcons 
-                  name="pets" 
-                  size={32} 
-                  color={selectedCall === 'tails' ? '#1B5E20' : '#FFD700'} 
-                />
-                <Text style={[
-                  styles.callButtonText,
-                  selectedCall === 'tails' && styles.selectedCallText
-                ]}>
-                  TAILS
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
         )}
+      </View>
 
-        {/* Flip Button */}
-        {!showResult && (
+      {/* Decision Selection */}
+      {tossResult && (
+        <Animated.View
+          style={[
+            styles.decisionContainer,
+            {
+              opacity: resultAnim,
+              transform: [
+                {
+                  translateY: resultAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [50, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Text style={styles.decisionTitle}>Choose to:</Text>
+          <View style={styles.decisionButtons}>
+            <TouchableOpacity
+              style={[
+                styles.decisionButton,
+                selectedDecision === 'bat' && styles.selectedDecisionButton,
+              ]}
+              onPress={() => setSelectedDecision('bat')}
+            >
+              <MaterialIcons 
+                name="sports-cricket" 
+                size={24} 
+                color={selectedDecision === 'bat' ? '#1B5E20' : '#FFFFFF'} 
+              />
+              <Text
+                style={[
+                  styles.decisionButtonText,
+                  selectedDecision === 'bat' && styles.selectedDecisionText,
+                ]}
+              >
+                Bat First
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.decisionButton,
+                selectedDecision === 'bowl' && styles.selectedDecisionButton,
+              ]}
+              onPress={() => setSelectedDecision('bowl')}
+            >
+              <MaterialIcons 
+                name="sports-baseball" 
+                size={24} 
+                color={selectedDecision === 'bowl' ? '#1B5E20' : '#FFFFFF'} 
+              />
+              <Text
+                style={[
+                  styles.decisionButtonText,
+                  selectedDecision === 'bowl' && styles.selectedDecisionText,
+                ]}
+              >
+                Bowl First
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <TouchableOpacity style={styles.confirmButton} onPress={confirmToss}>
+            <Text style={styles.confirmButtonText}>Confirm & Start Match</Text>
+          </TouchableOpacity>
+        </Animated.View>
+      )}
+
+      {/* Toss Button */}
+      {!tossResult && (
+        <View style={styles.tossButtonContainer}>
           <TouchableOpacity
-            style={[
-              styles.flipButton,
-              { opacity: (!selectedCall || isFlipping) ? 0.5 : 1 }
-            ]}
-            onPress={flipCoin}
-            disabled={!selectedCall || isFlipping}
+            style={[styles.tossButton, isFlipping && styles.disabledButton]}
+            onPress={performCoinToss}
+            disabled={isFlipping}
           >
             <MaterialIcons 
-              name={isFlipping ? "hourglass-empty" : "refresh"} 
-              size={24} 
+              name={isFlipping ? "hourglass-empty" : "monetization-on"} 
+              size={32} 
               color="#1B5E20" 
             />
-            <Text style={styles.flipButtonText}>
+            <Text style={styles.tossButtonText}>
               {isFlipping ? 'Flipping...' : 'Flip Coin'}
             </Text>
           </TouchableOpacity>
-        )}
-
-        {/* Result */}
-        {showResult && (
-          <Animated.View style={[styles.resultSection, { opacity: resultOpacity }]}>
-            <View style={styles.resultCard}>
-              <MaterialIcons 
-                name={tossResult === 'heads' ? 'face' : 'pets'} 
-                size={48} 
-                color="#FFD700" 
-              />
-              <Text style={styles.resultText}>
-                It's {tossResult?.toUpperCase()}!
-              </Text>
-              <Text style={styles.winnerText}>
-                {winner} {winner === 'You' ? 'won' : 'wins'} the toss!
-              </Text>
-            </View>
-
-            {winner === 'You' && !decision && (
-              <View style={styles.decisionSection}>
-                <Text style={styles.decisionTitle}>Choose to bat or bowl first:</Text>
-                <View style={styles.decisionButtons}>
-                  <TouchableOpacity
-                    style={styles.decisionButton}
-                    onPress={() => handleDecision('bat')}
-                  >
-                    <MaterialIcons name="sports-cricket" size={24} color="#1B5E20" />
-                    <Text style={styles.decisionButtonText}>Bat First</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity
-                    style={styles.decisionButton}
-                    onPress={() => handleDecision('bowl')}
-                  >
-                    <MaterialIcons name="sports-baseball" size={24} color="#1B5E20" />
-                    <Text style={styles.decisionButtonText}>Bowl First</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            {(winner === 'Opponent' || decision) && (
-              <TouchableOpacity style={styles.resetButton} onPress={resetToss}>
-                <MaterialIcons name="refresh" size={20} color="#FFD700" />
-                <Text style={styles.resetButtonText}>Toss Again</Text>
-              </TouchableOpacity>
-            )}
-          </Animated.View>
-        )}
-
-        {/* Instructions */}
-        <View style={styles.instructions}>
-          <Text style={styles.instructionsTitle}>🏏 Toss Instructions:</Text>
-          <Text style={styles.instructionText}>• Choose Heads or Tails</Text>
-          <Text style={styles.instructionText}>• Tap "Flip Coin" to start the toss</Text>
-          <Text style={styles.instructionText}>• Winner decides to bat or bowl first</Text>
-          <Text style={styles.instructionText}>• Both teams will be notified of the result</Text>
         </View>
+      )}
+
+      {/* Instructions */}
+      <View style={styles.instructionsContainer}>
+        <Text style={styles.instructionsText}>
+          {!tossResult 
+            ? "Tap 'Flip Coin' to determine which team wins the toss"
+            : "The winning team can choose to bat or bowl first"
+          }
+        </Text>
       </View>
     </SafeAreaView>
   );
@@ -339,198 +385,176 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1B5E20',
   },
-  content: {
-    flex: 1,
-    padding: 20,
-    alignItems: 'center',
-  },
   header: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 40,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#FFD700',
-    marginTop: 12,
+    color: '#FFFFFF',
   },
-  headerSubtitle: {
+  teamsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-around',
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+  },
+  teamCard: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    padding: 16,
+    minWidth: 120,
+  },
+  teamName: {
     fontSize: 16,
-    color: '#E8F5E8',
-    marginTop: 8,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 8,
     textAlign: 'center',
   },
+  vsText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#FFD700',
+  },
+  coinArea: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
   coinContainer: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  coin: {
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(255, 215, 0, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#FFD700',
+  },
+  sparkleContainer: {
+    position: 'absolute',
+    width: 200,
     height: 200,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 40,
   },
-  coin: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    backgroundColor: '#2E7D32',
-    justifyContent: 'center',
+  sparkle: {
+    position: 'absolute',
+  },
+  resultContainer: {
+    position: 'absolute',
+    bottom: -100,
     alignItems: 'center',
+  },
+  winnerText: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    textAlign: 'center',
+  },
+  winnerSubtext: {
+    fontSize: 18,
+    color: '#FFFFFF',
+    marginTop: 4,
+  },
+  decisionContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+  },
+  decisionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  decisionButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 20,
+  },
+  decisionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  selectedDecisionButton: {
+    backgroundColor: '#FFD700',
+    borderColor: '#FFD700',
+  },
+  decisionButtonText: {
+    fontSize: 16,
+    color: '#FFFFFF',
+    marginLeft: 8,
+    fontWeight: '500',
+  },
+  selectedDecisionText: {
+    color: '#1B5E20',
+    fontWeight: 'bold',
+  },
+  confirmButton: {
+    backgroundColor: '#FFD700',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginHorizontal: 20,
+  },
+  confirmButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1B5E20',
+  },
+  tossButtonContainer: {
+    paddingHorizontal: 16,
+    paddingVertical: 20,
+  },
+  tossButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFD700',
+    borderRadius: 12,
+    paddingVertical: 16,
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
-  callSection: {
-    alignItems: 'center',
-    marginBottom: 30,
+  disabledButton: {
+    opacity: 0.7,
   },
-  callTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFD700',
-    marginBottom: 20,
-  },
-  callButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-  },
-  callButton: {
-    backgroundColor: '#2E7D32',
-    borderRadius: 16,
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    borderWidth: 2,
-    borderColor: '#4CAF50',
-    minWidth: 120,
-  },
-  selectedCall: {
-    backgroundColor: '#FFD700',
-    borderColor: '#FFD700',
-  },
-  callButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFD700',
-    marginTop: 8,
-  },
-  selectedCallText: {
-    color: '#1B5E20',
-  },
-  flipButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFD700',
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-    borderRadius: 25,
-    marginBottom: 30,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  flipButtonText: {
+  tossButtonText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#1B5E20',
     marginLeft: 8,
   },
-  resultSection: {
-    alignItems: 'center',
-    width: '100%',
+  instructionsContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
   },
-  resultCard: {
-    backgroundColor: '#2E7D32',
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    marginBottom: 20,
-    borderWidth: 2,
-    borderColor: '#FFD700',
-    width: '100%',
-  },
-  resultText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFD700',
-    marginTop: 12,
-  },
-  winnerText: {
-    fontSize: 18,
-    color: '#E8F5E8',
-    marginTop: 8,
-  },
-  decisionSection: {
-    alignItems: 'center',
-    marginBottom: 20,
-    width: '100%',
-  },
-  decisionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFD700',
-    marginBottom: 16,
+  instructionsText: {
+    fontSize: 14,
+    color: 'rgba(255, 255, 255, 0.8)',
     textAlign: 'center',
-  },
-  decisionButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-  },
-  decisionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFD700',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    minWidth: 120,
-    justifyContent: 'center',
-  },
-  decisionButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#1B5E20',
-    marginLeft: 8,
-  },
-  resetButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2E7D32',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    borderWidth: 2,
-    borderColor: '#FFD700',
-  },
-  resetButtonText: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#FFD700',
-    marginLeft: 6,
-  },
-  instructions: {
-    backgroundColor: '#2E7D32',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 20,
-    borderWidth: 2,
-    borderColor: '#4CAF50',
-    borderStyle: 'dashed',
-    width: '100%',
-  },
-  instructionsTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFD700',
-    marginBottom: 12,
-  },
-  instructionText: {
-    fontSize: 14,
-    color: '#E8F5E8',
-    marginBottom: 6,
     lineHeight: 20,
   },
 });

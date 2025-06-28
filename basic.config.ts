@@ -11,6 +11,10 @@ export const schema = {
           "type": "number",
           "indexed": true
         },
+        "shares": {
+          "type": "number",
+          "indexed": true
+        },
         "userId": {
           "type": "string",
           "indexed": true
@@ -19,11 +23,27 @@ export const schema = {
           "type": "string",
           "indexed": true
         },
+        "hashtags": {
+          "type": "string",
+          "indexed": true
+        },
         "imageUrl": {
           "type": "string",
           "indexed": true
         },
+        "location": {
+          "type": "string",
+          "indexed": true
+        },
+        "postType": {
+          "type": "string",
+          "indexed": true
+        },
         "userName": {
+          "type": "string",
+          "indexed": true
+        },
+        "videoUrl": {
           "type": "string",
           "indexed": true
         },
@@ -32,26 +52,6 @@ export const schema = {
           "indexed": true
         },
         "jerseyNumber": {
-          "type": "string",
-          "indexed": true
-        },
-        "videoUrl": {
-          "type": "string",
-          "indexed": true
-        },
-        "postType": {
-          "type": "string",
-          "indexed": true
-        },
-        "shares": {
-          "type": "number",
-          "indexed": true
-        },
-        "location": {
-          "type": "string",
-          "indexed": true
-        },
-        "hashtags": {
           "type": "string",
           "indexed": true
         },
@@ -211,6 +211,38 @@ export const schema = {
           "indexed": true
         },
         "tossDecision": {
+          "type": "string",
+          "indexed": true
+        },
+        "title": {
+          "type": "string",
+          "indexed": true
+        },
+        "matchType": {
+          "type": "string",
+          "indexed": true
+        },
+        "overs": {
+          "type": "string",
+          "indexed": true
+        },
+        "playersPerTeam": {
+          "type": "number",
+          "indexed": true
+        },
+        "ballType": {
+          "type": "string",
+          "indexed": true
+        },
+        "teamAPlayers": {
+          "type": "string",
+          "indexed": true
+        },
+        "teamBPlayers": {
+          "type": "string",
+          "indexed": true
+        },
+        "creatorId": {
           "type": "string",
           "indexed": true
         }
@@ -377,6 +409,6 @@ export const schema = {
       }
     }
   },
-  "version": 2,
+  "version": 3,
   "project_id": "ed2d765b-98bc-43ad-a0b0-05eb9e6bfed9"
 };
