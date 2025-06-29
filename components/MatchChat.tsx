@@ -3,18 +3,16 @@ import {
   View,
   Text,
   StyleSheet,
-  FlatList,
   TextInput,
   TouchableOpacity,
+  FlatList,
   KeyboardAvoidingView,
   Platform,
-  Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useBasic } from '@basictech/expo';
 
-interface ChatMessage {
+interface Message {
   id: string;
   userId: string;
   userName: string;
@@ -27,29 +25,29 @@ interface ChatMessage {
 
 interface MatchChatProps {
   matchId: string;
-  matchTitle: string;
-  teamPlayers: Array<{ id: string; name: string; jerseyNumber: string }>;
-  onClose: () => void;
+  isActive: boolean;
 }
 
-export default function MatchChat({ matchId, matchTitle, teamPlayers, onClose }: MatchChatProps) {
+export default function MatchChat({ matchId, isActive }: MatchChatProps) {
   const { db, user } = useBasic();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
   const flatListRef = useRef<FlatList>(null);
 
   useEffect(() => {
-    fetchMessages();
-    const interval = setInterval(fetchMessages, 3000); // Poll for new messages
-    return () => clearInterval(interval);
-  }, [matchId]);
+    if (isActive) {
+      fetchMessages();
+      const interval = setInterval(fetchMessages, 3000); // Poll every 3 seconds
+      return () => clearInterval(interval);
+    }
+  }, [matchId, isActive]);
 
   const fetchMessages = async () => {
     try {
-      const chatMessages = await db?.from('chatMessages').getAll();
-      if (chatMessages) {
-        const matchMessages = (chatMessages as any[])
+      const allMessages = await db?.from('chatMessages').getAll();
+      if (allMessages) {
+        const matchMessages = (allMessages as any[])
           .filter(msg => msg.matchId === matchId)
           .sort((a, b) => a.createdAt - b.createdAt);
         setMessages(matchMessages);
@@ -60,20 +58,14 @@ export default function MatchChat({ matchId, matchTitle, teamPlayers, onClose }:
   };
 
   const sendMessage = async () => {
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || sending) return;
 
-    const userProfile = teamPlayers.find(p => p.id === user?.id);
-    if (!userProfile) {
-      Alert.alert('Error', 'You are not part of this match.');
-      return;
-    }
-
-    setLoading(true);
+    setSending(true);
     try {
       const messageData = {
         userId: user?.id || '',
-        userName: userProfile.name,
-        jerseyNumber: userProfile.jerseyNumber,
+        userName: user?.name || 'Unknown Player',
+        jerseyNumber: '00', // This should come from user profile
         message: newMessage.trim(),
         imageUrl: '',
         createdAt: Date.now(),
@@ -90,9 +82,8 @@ export default function MatchChat({ matchId, matchTitle, teamPlayers, onClose }:
       }, 100);
     } catch (error) {
       console.error('Error sending message:', error);
-      Alert.alert('Error', 'Failed to send message');
     } finally {
-      setLoading(false);
+      setSending(false);
     }
   };
 
@@ -101,7 +92,7 @@ export default function MatchChat({ matchId, matchTitle, teamPlayers, onClose }:
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const renderMessage = ({ item }: { item: ChatMessage }) => {
+  const renderMessage = ({ item }: { item: Message }) => {
     const isMyMessage = item.userId === user?.id;
     
     return (
@@ -131,69 +122,54 @@ export default function MatchChat({ matchId, matchTitle, teamPlayers, onClose }:
     );
   };
 
+  if (!isActive) {
+    return (
+      <View style={styles.inactiveContainer}>
+        <MaterialIcons name="chat-bubble-outline" size={48} color="#999" />
+        <Text style={styles.inactiveText}>Match chat is not active</Text>
+      </View>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <MaterialIcons name="arrow-back" size={24} color="#FFFFFF" />
-          </TouchableOpacity>
-          <View style={styles.headerContent}>
-            <Text style={styles.headerTitle}>{matchTitle}</Text>
-            <Text style={styles.headerSubtitle}>Team Chat • {teamPlayers.length} players</Text>
-          </View>
-        </View>
-
-        {/* Messages */}
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          keyExtractor={(item) => item.id}
-          renderItem={renderMessage}
-          style={styles.messagesList}
-          contentContainerStyle={styles.messagesContent}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.emptyChat}>
-              <MaterialIcons name="chat" size={48} color="#999" />
-              <Text style={styles.emptyChatText}>No messages yet</Text>
-              <Text style={styles.emptyChatSubtext}>Start the conversation!</Text>
-            </View>
-          }
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <FlatList
+        ref={flatListRef}
+        data={messages}
+        keyExtractor={(item) => item.id}
+        renderItem={renderMessage}
+        style={styles.messagesList}
+        contentContainerStyle={styles.messagesContent}
+        showsVerticalScrollIndicator={false}
+        onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+      />
+      
+      <View style={styles.inputContainer}>
+        <TextInput
+          style={styles.messageInput}
+          placeholder="Type a message..."
+          placeholderTextColor="#999"
+          value={newMessage}
+          onChangeText={setNewMessage}
+          multiline
+          maxLength={500}
         />
-
-        {/* Input */}
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.messageInput}
-            placeholder="Type a message..."
-            placeholderTextColor="#999"
-            value={newMessage}
-            onChangeText={setNewMessage}
-            multiline
-            maxLength={500}
+        <TouchableOpacity
+          style={[styles.sendButton, (!newMessage.trim() || sending) && styles.disabledSendButton]}
+          onPress={sendMessage}
+          disabled={!newMessage.trim() || sending}
+        >
+          <MaterialIcons 
+            name={sending ? "hourglass-empty" : "send"} 
+            size={24} 
+            color={(!newMessage.trim() || sending) ? "#999" : "#FFD700"} 
           />
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              (!newMessage.trim() || loading) && styles.sendButtonDisabled
-            ]}
-            onPress={sendMessage}
-            disabled={!newMessage.trim() || loading}
-          >
-            <MaterialIcons 
-              name="send" 
-              size={20} 
-              color={(!newMessage.trim() || loading) ? '#999' : '#FFFFFF'} 
-            />
-          </TouchableOpacity>
-        </View>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        </TouchableOpacity>
+      </View>
+    </KeyboardAvoidingView>
   );
 }
 
@@ -202,52 +178,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#F5F5F5',
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2E7D32',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  closeButton: {
-    marginRight: 12,
-  },
-  headerContent: {
+  inactiveContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  headerSubtitle: {
-    fontSize: 12,
-    color: '#E8F5E8',
-    marginTop: 2,
+  inactiveText: {
+    fontSize: 16,
+    color: '#999',
+    marginTop: 12,
   },
   messagesList: {
     flex: 1,
   },
   messagesContent: {
     padding: 16,
-    flexGrow: 1,
-  },
-  emptyChat: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyChatText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#666',
-    marginTop: 12,
-  },
-  emptyChatSubtext: {
-    fontSize: 14,
-    color: '#999',
-    marginTop: 4,
   },
   messageContainer: {
     marginBottom: 12,
@@ -255,7 +201,7 @@ const styles = StyleSheet.create({
   },
   myMessage: {
     alignSelf: 'flex-end',
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#2E7D32',
     borderRadius: 16,
     borderBottomRightRadius: 4,
     padding: 12,
@@ -266,11 +212,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderBottomLeftRadius: 4,
     padding: 12,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
   },
   messageHeader: {
     flexDirection: 'row',
@@ -279,7 +222,7 @@ const styles = StyleSheet.create({
   },
   senderName: {
     fontSize: 12,
-    fontWeight: '600',
+    fontWeight: 'bold',
     color: '#2E7D32',
   },
   jerseyNumber: {
@@ -302,7 +245,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   myMessageTime: {
-    color: '#E8F5E8',
+    color: 'rgba(255, 255, 255, 0.7)',
     textAlign: 'right',
   },
   otherMessageTime: {
@@ -311,9 +254,9 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    backgroundColor: '#FFFFFF',
     paddingHorizontal: 16,
     paddingVertical: 12,
+    backgroundColor: '#FFFFFF',
     borderTopWidth: 1,
     borderTopColor: '#E0E0E0',
   },
@@ -324,19 +267,19 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    marginRight: 12,
+    fontSize: 16,
     maxHeight: 100,
-    fontSize: 14,
+    marginRight: 8,
   },
   sendButton: {
-    backgroundColor: '#4CAF50',
-    borderRadius: 20,
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#2E7D32',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sendButtonDisabled: {
+  disabledSendButton: {
     backgroundColor: '#E0E0E0',
   },
 });

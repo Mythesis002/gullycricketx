@@ -162,14 +162,6 @@ export const schema = {
           "type": "string",
           "indexed": true
         },
-        "overs": {
-          "type": "string",
-          "indexed": true
-        },
-        "title": {
-          "type": "string",
-          "indexed": true
-        },
         "venue": {
           "type": "string",
           "indexed": true
@@ -190,20 +182,8 @@ export const schema = {
           "type": "string",
           "indexed": true
         },
-        "ballType": {
-          "type": "string",
-          "indexed": true
-        },
         "createdAt": {
           "type": "number",
-          "indexed": true
-        },
-        "creatorId": {
-          "type": "string",
-          "indexed": true
-        },
-        "matchType": {
-          "type": "string",
           "indexed": true
         },
         "teamAName": {
@@ -230,6 +210,30 @@ export const schema = {
           "type": "string",
           "indexed": true
         },
+        "tossDecision": {
+          "type": "string",
+          "indexed": true
+        },
+        "title": {
+          "type": "string",
+          "indexed": true
+        },
+        "matchType": {
+          "type": "string",
+          "indexed": true
+        },
+        "overs": {
+          "type": "string",
+          "indexed": true
+        },
+        "playersPerTeam": {
+          "type": "number",
+          "indexed": true
+        },
+        "ballType": {
+          "type": "string",
+          "indexed": true
+        },
         "teamAPlayers": {
           "type": "string",
           "indexed": true
@@ -238,12 +242,8 @@ export const schema = {
           "type": "string",
           "indexed": true
         },
-        "tossDecision": {
+        "creatorId": {
           "type": "string",
-          "indexed": true
-        },
-        "playersPerTeam": {
-          "type": "number",
           "indexed": true
         }
       }
@@ -409,6 +409,6 @@ export const schema = {
       }
     }
   },
-  "version": 4,
+  "version": 3,
   "project_id": "ed2d765b-98bc-43ad-a0b0-05eb9e6bfed9"
 };
