@@ -3,39 +3,30 @@ import {
   View,
   Text,
   StyleSheet,
-  TextInput,
-  TouchableOpacity,
   ScrollView,
+  TouchableOpacity,
+  TextInput,
   Alert,
-  KeyboardAvoidingView,
-  Platform,
   Animated,
+  Dimensions,
   Modal,
   FlatList,
-  Dimensions,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useBasic } from '@basictech/expo';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-interface User {
+interface Player {
   id: string;
   name: string;
-  email: string;
   jerseyNumber: string;
+  email: string;
   profilePicture?: string;
-}
-
-interface Team {
-  id: string;
-  name: string;
-  captainId: string;
-  captainName: string;
-  playerIds: string;
-  playerNames: string;
 }
 
 interface MatchData {
@@ -46,188 +37,201 @@ interface MatchData {
   ballType: 'leather' | 'tennis';
   date: string;
   time: string;
-  location: string;
-  teamA: {
-    name: string;
-    players: User[];
-  };
-  teamB: {
-    name: string;
-    players: User[];
-  };
+  venue: string;
+  teamAName: string;
+  teamBName: string;
+  teamAPlayers: Player[];
+  teamBPlayers: Player[];
 }
+
+type Step = 'match-details' | 'team-setup' | 'match-start' | 'coin-toss';
 
 export default function CreateMatchScreen() {
   const { db, user } = useBasic();
   const navigation = useNavigation<any>();
   
-  // Step management
-  const [currentStep, setCurrentStep] = useState(1);
+  // Core state
+  const [currentStep, setCurrentStep] = useState<Step>('match-details');
   const [loading, setLoading] = useState(false);
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   
-  // Data states
-  const [allUsers, setAllUsers] = useState<User[]>([]);
+  // Match data state
   const [matchData, setMatchData] = useState<MatchData>({
     title: '',
     matchType: 'single',
     overs: 'T20',
     playersPerTeam: 11,
     ballType: 'leather',
-    date: '',
-    time: '',
-    location: '',
-    teamA: { name: '', players: [] },
-    teamB: { name: '', players: [] },
+    date: new Date().toISOString().split('T')[0],
+    time: '18:00',
+    venue: '',
+    teamAName: `${user?.name || 'Captain'}'s Team`,
+    teamBName: '',
+    teamAPlayers: [],
+    teamBPlayers: [],
   });
-  
-  // UI states
+
+  // UI state
   const [showPlayerSearch, setShowPlayerSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTeam, setSelectedTeam] = useState<'A' | 'B'>('A');
-  const [showTossModal, setShowTossModal] = useState(false);
-  const [tossResult, setTossResult] = useState<{ winner: 'A' | 'B'; decision: 'bat' | 'bowl' } | null>(null);
-  
-  // Animation refs
-  const progressAnim = useRef(new Animated.Value(0)).current;
+  const [showCoinToss, setShowCoinToss] = useState(false);
+  const [tossResult, setTossResult] = useState<{
+    winner: 'A' | 'B';
+    decision?: 'bat' | 'bowl';
+  } | null>(null);
+
+  // Animations
+  const progressAnim = useRef(new Animated.Value(0.25)).current;
   const coinAnim = useRef(new Animated.Value(0)).current;
-  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const fadeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
-    fetchUsers();
-    setDefaultValues();
+    fetchAllPlayers();
   }, []);
 
   useEffect(() => {
-    // Animate progress bar
+    // Update progress animation based on current step
+    const progressValues = {
+      'match-details': 0.25,
+      'team-setup': 0.5,
+      'match-start': 0.75,
+      'coin-toss': 1,
+    };
+    
     Animated.timing(progressAnim, {
-      toValue: (currentStep - 1) / 2, // 3 steps total
+      toValue: progressValues[currentStep],
       duration: 300,
       useNativeDriver: false,
     }).start();
-  }, [currentStep]);
+  }, [currentStep, progressAnim]);
 
-  const fetchUsers = async () => {
+  const fetchAllPlayers = async () => {
     try {
       const users = await db?.from('users').getAll();
       if (users) {
-        setAllUsers(users as User[]);
+        const players = (users as any[])
+          .filter(u => u.id !== user?.id) // Exclude current user
+          .map(u => ({
+            id: u.id,
+            name: u.name,
+            jerseyNumber: u.jerseyNumber || '00',
+            email: u.email,
+            profilePicture: u.profilePicture,
+          }));
+        setAllPlayers(players);
       }
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error('Error fetching players:', error);
     }
   };
 
-  const setDefaultValues = () => {
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+  const filteredPlayers = allPlayers.filter(player => {
+    const matchesSearch = player.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         player.jerseyNumber.includes(searchQuery);
+    const notInTeamA = !matchData.teamAPlayers.find(p => p.id === player.id);
+    const notInTeamB = !matchData.teamBPlayers.find(p => p.id === player.id);
+    return matchesSearch && notInTeamA && notInTeamB;
+  });
+
+  const updateMatchData = (updates: Partial<MatchData>) => {
+    setMatchData(prev => ({ ...prev, ...updates }));
+  };
+
+  const addPlayerToTeam = (player: Player, team: 'A' | 'B') => {
+    const teamKey = team === 'A' ? 'teamAPlayers' : 'teamBPlayers';
+    const currentTeam = matchData[teamKey];
     
-    setMatchData(prev => ({
-      ...prev,
-      date: tomorrow.toISOString().split('T')[0],
-      time: '15:00',
-      teamA: { ...prev.teamA, name: `${user?.name || 'Captain'}'s Team` },
-    }));
-  };
-
-  const filteredUsers = allUsers.filter(u => 
-    u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.jerseyNumber.includes(searchQuery)
-  );
-
-  const isPlayerSelected = (playerId: string) => {
-    return matchData.teamA.players.some(p => p.id === playerId) ||
-           matchData.teamB.players.some(p => p.id === playerId);
-  };
-
-  const addPlayerToTeam = (player: User, team: 'A' | 'B') => {
-    if (isPlayerSelected(player.id)) {
-      Alert.alert('Player Already Selected', 'This player is already in a team.');
-      return;
-    }
-
-    const currentTeam = team === 'A' ? matchData.teamA : matchData.teamB;
-    if (currentTeam.players.length >= matchData.playersPerTeam) {
+    if (currentTeam.length >= matchData.playersPerTeam) {
       Alert.alert('Team Full', `Team ${team} already has ${matchData.playersPerTeam} players.`);
       return;
     }
 
-    setMatchData(prev => ({
-      ...prev,
-      [team === 'A' ? 'teamA' : 'teamB']: {
-        ...currentTeam,
-        players: [...currentTeam.players, player]
-      }
-    }));
+    updateMatchData({
+      [teamKey]: [...currentTeam, player]
+    });
+    setShowPlayerSearch(false);
+    setSearchQuery('');
   };
 
   const removePlayerFromTeam = (playerId: string, team: 'A' | 'B') => {
-    const currentTeam = team === 'A' ? matchData.teamA : matchData.teamB;
-    setMatchData(prev => ({
-      ...prev,
-      [team === 'A' ? 'teamA' : 'teamB']: {
-        ...currentTeam,
-        players: currentTeam.players.filter(p => p.id !== playerId)
-      }
-    }));
+    const teamKey = team === 'A' ? 'teamAPlayers' : 'teamBPlayers';
+    const currentTeam = matchData[teamKey];
+    
+    updateMatchData({
+      [teamKey]: currentTeam.filter(p => p.id !== playerId)
+    });
   };
 
-  const validateStep = (step: number): boolean => {
+  const validateStep = (step: Step): boolean => {
     switch (step) {
-      case 1:
-        return !!(matchData.title && matchData.date && matchData.time && matchData.location);
-      case 2:
-        return matchData.teamA.players.length === matchData.playersPerTeam &&
-               matchData.teamB.players.length === matchData.playersPerTeam &&
-               !!matchData.teamA.name && !!matchData.teamB.name;
+      case 'match-details':
+        return !!(matchData.title && matchData.venue && matchData.teamBName);
+      case 'team-setup':
+        return matchData.teamAPlayers.length === matchData.playersPerTeam &&
+               matchData.teamBPlayers.length === matchData.playersPerTeam;
       default:
         return true;
     }
   };
 
   const nextStep = () => {
-    if (validateStep(currentStep)) {
-      setCurrentStep(prev => Math.min(prev + 1, 3));
-    } else {
-      Alert.alert('Incomplete Information', 'Please fill in all required fields before proceeding.');
+    if (!validateStep(currentStep)) {
+      Alert.alert('Incomplete', 'Please fill all required fields before proceeding.');
+      return;
+    }
+
+    const steps: Step[] = ['match-details', 'team-setup', 'match-start'];
+    const currentIndex = steps.indexOf(currentStep);
+    if (currentIndex < steps.length - 1) {
+      setCurrentStep(steps[currentIndex + 1]);
     }
   };
 
   const prevStep = () => {
-    setCurrentStep(prev => Math.max(prev - 1, 1));
+    const steps: Step[] = ['match-details', 'team-setup', 'match-start'];
+    const currentIndex = steps.indexOf(currentStep);
+    if (currentIndex > 0) {
+      setCurrentStep(steps[currentIndex - 1]);
+    }
   };
 
-  const performCoinToss = () => {
-    // Animate coin flip
+  const startCoinToss = () => {
+    setShowCoinToss(true);
+    setCurrentStep('coin-toss');
+    
+    // Coin flip animation
     Animated.sequence([
       Animated.timing(coinAnim, {
         toValue: 1,
-        duration: 1000,
+        duration: 2000,
         useNativeDriver: true,
       }),
-      Animated.timing(scaleAnim, {
-        toValue: 1.2,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scaleAnim, {
-        toValue: 1,
-        duration: 200,
+      Animated.timing(fadeAnim, {
+        toValue: 0.3,
+        duration: 500,
         useNativeDriver: true,
       }),
     ]).start(() => {
+      // Determine toss winner randomly
       const winner = Math.random() > 0.5 ? 'A' : 'B';
-      setTossResult({ winner, decision: 'bat' }); // Default to bat, user can change
+      setTossResult({ winner });
     });
   };
 
-  const createMatch = async (playNow: boolean = false) => {
+  const handleTossDecision = (decision: 'bat' | 'bowl') => {
+    if (!tossResult) return;
+    
+    setTossResult({ ...tossResult, decision });
+    createMatch();
+  };
+
+  const createMatch = async () => {
+    if (!tossResult) return;
+    
     setLoading(true);
     try {
-      const matchId = Date.now().toString();
-      
-      const newMatch = {
-        id: matchId,
+      const matchToCreate = {
         title: matchData.title,
         matchType: matchData.matchType,
         overs: matchData.overs,
@@ -235,66 +239,120 @@ export default function CreateMatchScreen() {
         ballType: matchData.ballType,
         date: matchData.date,
         time: matchData.time,
-        venue: matchData.location,
-        format: matchData.overs,
-        status: playNow ? 'toss' : 'scheduled',
-        teamAId: 'teamA_' + matchId,
-        teamBId: 'teamB_' + matchId,
-        teamAName: matchData.teamA.name,
-        teamBName: matchData.teamB.name,
-        teamAPlayers: JSON.stringify(matchData.teamA.players),
-        teamBPlayers: JSON.stringify(matchData.teamB.players),
-        tossWinner: tossResult?.winner || '',
-        tossDecision: tossResult?.decision || '',
-        battingTeam: tossResult?.decision === 'bat' ? 
-          (tossResult.winner === 'A' ? matchData.teamA.name : matchData.teamB.name) : 
-          (tossResult.winner === 'A' ? matchData.teamB.name : matchData.teamA.name),
-        currentScore: '0/0',
+        venue: matchData.venue,
+        teamAName: matchData.teamAName,
+        teamBName: matchData.teamBName,
+        teamAPlayers: JSON.stringify(matchData.teamAPlayers),
+        teamBPlayers: JSON.stringify(matchData.teamBPlayers),
+        teamAId: 'temp-a',
+        teamBId: 'temp-b',
+        status: 'live',
+        tossWinner: tossResult.winner === 'A' ? matchData.teamAName : matchData.teamBName,
+        tossDecision: tossResult.decision,
+        battingTeam: tossResult.decision === 'bat' 
+          ? (tossResult.winner === 'A' ? matchData.teamAName : matchData.teamBName)
+          : (tossResult.winner === 'A' ? matchData.teamBName : matchData.teamAName),
         currentOvers: '0.0',
+        currentScore: '0/0',
+        format: matchData.overs,
         createdAt: Date.now(),
         creatorId: user?.id || '',
       };
 
-      await db?.from('matches').add(newMatch);
-
-      // Create match chat
-      const chatData = {
-        matchId: matchId,
-        participants: JSON.stringify([
-          ...matchData.teamA.players.map(p => p.id),
-          ...matchData.teamB.players.map(p => p.id)
-        ]),
-        createdAt: Date.now(),
-        isActive: true,
-      };
-
-      // Send notifications to all players
-      const allPlayers = [...matchData.teamA.players, ...matchData.teamB.players];
-      for (const player of allPlayers) {
-        const notification = {
-          userId: player.id,
-          title: '🏏 New Match Created!',
-          message: `You've been selected for ${matchData.title}. ${matchData.teamA.name} vs ${matchData.teamB.name} on ${matchData.date} at ${matchData.time}`,
-          type: 'match_invitation',
-          read: false,
-          matchId: matchId,
-          createdAt: Date.now(),
-        };
-        await db?.from('notifications').add(notification);
-      }
-
-      if (playNow) {
-        setShowTossModal(true);
-      } else {
+      const createdMatch = await db?.from('matches').add(matchToCreate);
+      
+      if (createdMatch) {
+        // Send notifications to all players
+        await sendMatchNotifications(createdMatch.id as string);
+        
         Alert.alert(
-          'Match Created! 🎉',
-          `${matchData.title} has been scheduled successfully. All players have been notified.`,
-          [{ text: 'OK', onPress: () => navigation.goBack() }]
+          'Match Created! 🏏',
+          'All players have been notified. Good luck with your match!',
+          [
+            {
+              text: 'View Match',
+              onPress: () => {
+                navigation.replace('MatchDetail', { matchId: createdMatch.id });
+              }
+            }
+          ]
         );
       }
     } catch (error) {
       console.error('Error creating match:', error);
       Alert.alert('Error', 'Failed to create match. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sendMatchNotifications = async (matchId: string) => {
+    const allMatchPlayers = [...matchData.teamAPlayers, ...matchData.teamBPlayers];
+    
+    for (const player of allMatchPlayers) {
+      try {
+        await db?.from('notifications').add({
+          userId: player.id,
+          type: 'match_invitation',
+          title: '🏏 Match Invitation',
+          message: `You've been selected for "${matchData.title}" at ${matchData.venue}`,
+          read: false,
+          createdAt: Date.now(),
+        });
+      } catch (error) {
+        console.error('Error sending notification to player:', player.name, error);
+      }
+    }
+  };
+
+  const scheduleMatch = async () => {
+    setLoading(true);
+    try {
+      const matchToCreate = {
+        title: matchData.title,
+        matchType: matchData.matchType,
+        overs: matchData.overs,
+        playersPerTeam: matchData.playersPerTeam,
+        ballType: matchData.ballType,
+        date: matchData.date,
+        time: matchData.time,
+        venue: matchData.venue,
+        teamAName: matchData.teamAName,
+        teamBName: matchData.teamBName,
+        teamAPlayers: JSON.stringify(matchData.teamAPlayers),
+        teamBPlayers: JSON.stringify(matchData.teamBPlayers),
+        teamAId: 'temp-a',
+        teamBId: 'temp-b',
+        status: 'scheduled',
+        tossWinner: '',
+        tossDecision: '',
+        battingTeam: '',
+        currentOvers: '0.0',
+        currentScore: '0/0',
+        format: matchData.overs,
+        createdAt: Date.now(),
+        creatorId: user?.id || '',
+      };
+
+      const createdMatch = await db?.from('matches').add(matchToCreate);
+      
+      if (createdMatch) {
+        await sendMatchNotifications(createdMatch.id as string);
+        
+        Alert.alert(
+          'Match Scheduled! 📅',
+          `Match scheduled for ${matchData.date} at ${matchData.time}. All players have been notified.`,
+          [
+            {
+              text: 'View Matches',
+              onPress: () => navigation.navigate('Matches')
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Error scheduling match:', error);
+      Alert.alert('Error', 'Failed to schedule match. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -315,51 +373,34 @@ export default function CreateMatchScreen() {
           ]} 
         />
       </View>
-      <View style={styles.stepIndicators}>
-        {[1, 2, 3].map((step) => (
-          <View
-            key={step}
-            style={[
-              styles.stepIndicator,
-              currentStep >= step && styles.activeStepIndicator
-            ]}
-          >
-            <Text style={[
-              styles.stepText,
-              currentStep >= step && styles.activeStepText
-            ]}>
-              {step}
-            </Text>
-          </View>
-        ))}
-      </View>
+      <Text style={styles.progressText}>
+        Step {currentStep === 'match-details' ? '1' : currentStep === 'team-setup' ? '2' : '3'} of 3
+      </Text>
     </View>
   );
 
-  const renderStep1 = () => (
+  const renderMatchDetailsStep = () => (
     <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
       <Text style={styles.stepTitle}>🏏 Match Details</Text>
       
-      {/* Match Title */}
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Match Title *</Text>
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>Match Title *</Text>
         <TextInput
-          style={styles.textInput}
-          placeholder="e.g., Sunday League Match"
+          style={styles.input}
+          placeholder="e.g., Sunday Cricket Match"
           value={matchData.title}
-          onChangeText={(text) => setMatchData(prev => ({ ...prev, title: text }))}
+          onChangeText={(text) => updateMatchData({ title: text })}
         />
       </View>
 
-      {/* Match Type */}
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Match Type</Text>
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>Match Type</Text>
         <View style={styles.optionGrid}>
           {[
             { key: 'single', label: 'Single Match', icon: 'sports-cricket' },
-            { key: 'series', label: 'Series', icon: 'view-list' },
+            { key: 'series', label: 'Series', icon: 'timeline' },
             { key: 'tournament', label: 'Tournament', icon: 'emoji-events' },
-            { key: 'league', label: 'League', icon: 'leaderboard' },
+            { key: 'league', label: 'League', icon: 'groups' },
           ].map((option) => (
             <TouchableOpacity
               key={option.key}
@@ -367,7 +408,7 @@ export default function CreateMatchScreen() {
                 styles.optionCard,
                 matchData.matchType === option.key && styles.selectedOption
               ]}
-              onPress={() => setMatchData(prev => ({ ...prev, matchType: option.key as any }))}
+              onPress={() => updateMatchData({ matchType: option.key as any })}
             >
               <MaterialIcons 
                 name={option.icon as any} 
@@ -385,445 +426,430 @@ export default function CreateMatchScreen() {
         </View>
       </View>
 
-      {/* Overs */}
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Match Format</Text>
-        <View style={styles.chipContainer}>
-          {['T10', 'T20', 'ODI', '5 Overs', '15 Overs', 'Custom'].map((format) => (
-            <TouchableOpacity
-              key={format}
-              style={[
-                styles.chip,
-                matchData.overs === format && styles.selectedChip
-              ]}
-              onPress={() => setMatchData(prev => ({ ...prev, overs: format }))}
-            >
-              <Text style={[
-                styles.chipText,
-                matchData.overs === format && styles.selectedChipText
-              ]}>
-                {format}
-              </Text>
-            </TouchableOpacity>
-          ))}
+      <View style={styles.formRow}>
+        <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+          <Text style={styles.label}>Overs</Text>
+          <View style={styles.pickerContainer}>
+            {['T10', 'T20', 'ODI', 'Custom'].map((over) => (
+              <TouchableOpacity
+                key={over}
+                style={[
+                  styles.pickerOption,
+                  matchData.overs === over && styles.selectedPicker
+                ]}
+                onPress={() => updateMatchData({ overs: over })}
+              >
+                <Text style={[
+                  styles.pickerText,
+                  matchData.overs === over && styles.selectedPickerText
+                ]}>
+                  {over}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
+        <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
+          <Text style={styles.label}>Players/Team</Text>
+          <View style={styles.pickerContainer}>
+            {[5, 7, 11].map((count) => (
+              <TouchableOpacity
+                key={count}
+                style={[
+                  styles.pickerOption,
+                  matchData.playersPerTeam === count && styles.selectedPicker
+                ]}
+                onPress={() => updateMatchData({ playersPerTeam: count })}
+              >
+                <Text style={[
+                  styles.pickerText,
+                  matchData.playersPerTeam === count && styles.selectedPickerText
+                ]}>
+                  {count}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       </View>
 
-      {/* Players per team */}
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Players per Team</Text>
-        <View style={styles.chipContainer}>
-          {[5, 7, 11].map((count) => (
-            <TouchableOpacity
-              key={count}
-              style={[
-                styles.chip,
-                matchData.playersPerTeam === count && styles.selectedChip
-              ]}
-              onPress={() => setMatchData(prev => ({ ...prev, playersPerTeam: count }))}
-            >
-              <Text style={[
-                styles.chipText,
-                matchData.playersPerTeam === count && styles.selectedChipText
-              ]}>
-                {count} Players
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-
-      {/* Ball Type */}
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Ball Type</Text>
-        <View style={styles.chipContainer}>
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>Ball Type</Text>
+        <View style={styles.radioGroup}>
           {[
             { key: 'leather', label: 'Leather Ball', icon: 'sports-cricket' },
             { key: 'tennis', label: 'Tennis Ball', icon: 'sports-tennis' },
-          ].map((ball) => (
+          ].map((option) => (
             <TouchableOpacity
-              key={ball.key}
+              key={option.key}
               style={[
-                styles.ballOption,
-                matchData.ballType === ball.key && styles.selectedChip
+                styles.radioOption,
+                matchData.ballType === option.key && styles.selectedRadio
               ]}
-              onPress={() => setMatchData(prev => ({ ...prev, ballType: ball.key as any }))}
+              onPress={() => updateMatchData({ ballType: option.key as any })}
             >
               <MaterialIcons 
-                name={ball.icon as any} 
+                name={option.icon as any} 
                 size={20} 
-                color={matchData.ballType === ball.key ? '#FFD700' : '#666'} 
+                color={matchData.ballType === option.key ? '#FFD700' : '#666'} 
               />
               <Text style={[
-                styles.chipText,
-                matchData.ballType === ball.key && styles.selectedChipText
+                styles.radioText,
+                matchData.ballType === option.key && styles.selectedRadioText
               ]}>
-                {ball.label}
+                {option.label}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
       </View>
 
-      {/* Date & Time */}
-      <View style={styles.rowInputs}>
-        <View style={[styles.inputGroup, { flex: 1, marginRight: 8 }]}>
-          <Text style={styles.inputLabel}>Date *</Text>
+      <View style={styles.formRow}>
+        <View style={[styles.formGroup, { flex: 1, marginRight: 8 }]}>
+          <Text style={styles.label}>Date</Text>
           <TextInput
-            style={styles.textInput}
-            placeholder="YYYY-MM-DD"
+            style={styles.input}
             value={matchData.date}
-            onChangeText={(text) => setMatchData(prev => ({ ...prev, date: text }))}
+            onChangeText={(text) => updateMatchData({ date: text })}
+            placeholder="YYYY-MM-DD"
           />
         </View>
-        <View style={[styles.inputGroup, { flex: 1, marginLeft: 8 }]}>
-          <Text style={styles.inputLabel}>Time *</Text>
+
+        <View style={[styles.formGroup, { flex: 1, marginLeft: 8 }]}>
+          <Text style={styles.label}>Time</Text>
           <TextInput
-            style={styles.textInput}
-            placeholder="HH:MM"
+            style={styles.input}
             value={matchData.time}
-            onChangeText={(text) => setMatchData(prev => ({ ...prev, time: text }))}
+            onChangeText={(text) => updateMatchData({ time: text })}
+            placeholder="HH:MM"
           />
         </View>
       </View>
 
-      {/* Location */}
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Match Location *</Text>
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>Venue *</Text>
         <TextInput
-          style={styles.textInput}
+          style={styles.input}
           placeholder="e.g., Central Park Cricket Ground"
-          value={matchData.location}
-          onChangeText={(text) => setMatchData(prev => ({ ...prev, location: text }))}
+          value={matchData.venue}
+          onChangeText={(text) => updateMatchData({ venue: text })}
+        />
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>Team B Name *</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Enter opponent team name"
+          value={matchData.teamBName}
+          onChangeText={(text) => updateMatchData({ teamBName: text })}
         />
       </View>
     </ScrollView>
   );
 
-  const renderStep2 = () => (
+  const renderTeamSetupStep = () => (
     <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
       <Text style={styles.stepTitle}>👥 Team Setup</Text>
       
-      {/* Team A */}
-      <View style={styles.teamSection}>
-        <View style={styles.teamHeader}>
-          <Text style={styles.teamTitle}>Team A</Text>
-          <Text style={styles.playerCount}>
-            {matchData.teamA.players.length}/{matchData.playersPerTeam}
-          </Text>
-        </View>
-        
-        <TextInput
-          style={styles.teamNameInput}
-          placeholder="Team A Name"
-          value={matchData.teamA.name}
-          onChangeText={(text) => setMatchData(prev => ({
-            ...prev,
-            teamA: { ...prev.teamA, name: text }
-          }))}
-        />
-
-        <View style={styles.playersContainer}>
-          {matchData.teamA.players.map((player) => (
-            <View key={player.id} style={styles.playerCard}>
-              <View style={styles.playerInfo}>
-                <MaterialIcons name="person" size={20} color="#2E7D32" />
-                <Text style={styles.playerName}>{player.name}</Text>
-                <Text style={styles.playerJersey}>#{player.jerseyNumber}</Text>
-              </View>
-              <TouchableOpacity
-                onPress={() => removePlayerFromTeam(player.id, 'A')}
-                style={styles.removeButton}
-              >
-                <MaterialIcons name="close" size={16} color="#FF5722" />
-              </TouchableOpacity>
-            </View>
-          ))}
+      <View style={styles.teamContainer}>
+        <View style={styles.teamSection}>
+          <View style={styles.teamHeader}>
+            <Text style={styles.teamTitle}>Team A</Text>
+            <Text style={styles.teamCount}>
+              {matchData.teamAPlayers.length}/{matchData.playersPerTeam}
+            </Text>
+          </View>
           
-          {matchData.teamA.players.length < matchData.playersPerTeam && (
-            <TouchableOpacity
-              style={styles.addPlayerButton}
-              onPress={() => {
-                setSelectedTeam('A');
-                setShowPlayerSearch(true);
-              }}
-            >
-              <MaterialIcons name="add" size={24} color="#2E7D32" />
-              <Text style={styles.addPlayerText}>Add Player</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      </View>
+          <TextInput
+            style={styles.teamNameInput}
+            value={matchData.teamAName}
+            onChangeText={(text) => updateMatchData({ teamAName: text })}
+            placeholder="Team A Name"
+          />
 
-      {/* VS Divider */}
-      <View style={styles.vsContainer}>
-        <Text style={styles.vsText}>VS</Text>
-      </View>
-
-      {/* Team B */}
-      <View style={styles.teamSection}>
-        <View style={styles.teamHeader}>
-          <Text style={styles.teamTitle}>Team B</Text>
-          <Text style={styles.playerCount}>
-            {matchData.teamB.players.length}/{matchData.playersPerTeam}
-          </Text>
-        </View>
-        
-        <TextInput
-          style={styles.teamNameInput}
-          placeholder="Team B Name"
-          value={matchData.teamB.name}
-          onChangeText={(text) => setMatchData(prev => ({
-            ...prev,
-            teamB: { ...prev.teamB, name: text }
-          }))}
-        />
-
-        <View style={styles.playersContainer}>
-          {matchData.teamB.players.map((player) => (
-            <View key={player.id} style={styles.playerCard}>
-              <View style={styles.playerInfo}>
-                <MaterialIcons name="person" size={20} color="#2E7D32" />
-                <Text style={styles.playerName}>{player.name}</Text>
-                <Text style={styles.playerJersey}>#{player.jerseyNumber}</Text>
+          <View style={styles.playersContainer}>
+            {matchData.teamAPlayers.map((player) => (
+              <View key={player.id} style={styles.playerCard}>
+                <View style={styles.playerInfo}>
+                  <View style={styles.playerAvatar}>
+                    <Text style={styles.playerInitial}>
+                      {player.name.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View>
+                    <Text style={styles.playerName}>{player.name}</Text>
+                    <Text style={styles.playerJersey}>#{player.jerseyNumber}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  onPress={() => removePlayerFromTeam(player.id, 'A')}
+                  style={styles.removeButton}
+                >
+                  <MaterialIcons name="close" size={16} color="#FF5722" />
+                </TouchableOpacity>
               </View>
+            ))}
+            
+            {matchData.teamAPlayers.length < matchData.playersPerTeam && (
               <TouchableOpacity
-                onPress={() => removePlayerFromTeam(player.id, 'B')}
-                style={styles.removeButton}
+                style={styles.addPlayerButton}
+                onPress={() => {
+                  setSelectedTeam('A');
+                  setShowPlayerSearch(true);
+                }}
               >
-                <MaterialIcons name="close" size={16} color="#FF5722" />
+                <MaterialIcons name="add" size={24} color="#2E7D32" />
+                <Text style={styles.addPlayerText}>Add Player</Text>
               </TouchableOpacity>
-            </View>
-          ))}
+            )}
+          </View>
+        </View>
+
+        <View style={styles.vsContainer}>
+          <Text style={styles.vsText}>VS</Text>
+        </View>
+
+        <View style={styles.teamSection}>
+          <View style={styles.teamHeader}>
+            <Text style={styles.teamTitle}>Team B</Text>
+            <Text style={styles.teamCount}>
+              {matchData.teamBPlayers.length}/{matchData.playersPerTeam}
+            </Text>
+          </View>
           
-          {matchData.teamB.players.length < matchData.playersPerTeam && (
-            <TouchableOpacity
-              style={styles.addPlayerButton}
-              onPress={() => {
-                setSelectedTeam('B');
-                setShowPlayerSearch(true);
-              }}
-            >
-              <MaterialIcons name="add" size={24} color="#2E7D32" />
-              <Text style={styles.addPlayerText}>Add Player</Text>
-            </TouchableOpacity>
-          )}
+          <TextInput
+            style={styles.teamNameInput}
+            value={matchData.teamBName}
+            onChangeText={(text) => updateMatchData({ teamBName: text })}
+            placeholder="Team B Name *"
+          />
+
+          <View style={styles.playersContainer}>
+            {matchData.teamBPlayers.map((player) => (
+              <View key={player.id} style={styles.playerCard}>
+                <View style={styles.playerInfo}>
+                  <View style={styles.playerAvatar}>
+                    <Text style={styles.playerInitial}>
+                      {player.name.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View>
+                    <Text style={styles.playerName}>{player.name}</Text>
+                    <Text style={styles.playerJersey}>#{player.jerseyNumber}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  onPress={() => removePlayerFromTeam(player.id, 'B')}
+                  style={styles.removeButton}
+                >
+                  <MaterialIcons name="close" size={16} color="#FF5722" />
+                </TouchableOpacity>
+              </View>
+            ))}
+            
+            {matchData.teamBPlayers.length < matchData.playersPerTeam && (
+              <TouchableOpacity
+                style={styles.addPlayerButton}
+                onPress={() => {
+                  setSelectedTeam('B');
+                  setShowPlayerSearch(true);
+                }}
+              >
+                <MaterialIcons name="add" size={24} color="#2E7D32" />
+                <Text style={styles.addPlayerText}>Add Player</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </View>
     </ScrollView>
   );
 
-  const renderStep3 = () => (
-    <ScrollView style={styles.stepContainer} showsVerticalScrollIndicator={false}>
-      <Text style={styles.stepTitle}>🚀 Match Start Mode</Text>
+  const renderMatchStartStep = () => (
+    <View style={styles.stepContainer}>
+      <Text style={styles.stepTitle}>🚀 Ready to Start?</Text>
       
       <View style={styles.matchSummary}>
         <Text style={styles.summaryTitle}>{matchData.title}</Text>
         <Text style={styles.summarySubtitle}>
-          {matchData.teamA.name} vs {matchData.teamB.name}
+          {matchData.overs} • {matchData.playersPerTeam}v{matchData.playersPerTeam} • {matchData.ballType} ball
         </Text>
-        <Text style={styles.summaryDetails}>
+        <Text style={styles.summaryVenue}>📍 {matchData.venue}</Text>
+        <Text style={styles.summaryDateTime}>
           📅 {matchData.date} at {matchData.time}
         </Text>
-        <Text style={styles.summaryDetails}>
-          📍 {matchData.location}
-        </Text>
-        <Text style={styles.summaryDetails}>
-          🏏 {matchData.overs} • {matchData.playersPerTeam} players • {matchData.ballType} ball
-        </Text>
+        
+        <View style={styles.teamsPreview}>
+          <View style={styles.teamPreview}>
+            <Text style={styles.teamPreviewName}>{matchData.teamAName}</Text>
+            <Text style={styles.teamPreviewCount}>
+              {matchData.teamAPlayers.length} players
+            </Text>
+          </View>
+          <Text style={styles.vsPreview}>VS</Text>
+          <View style={styles.teamPreview}>
+            <Text style={styles.teamPreviewName}>{matchData.teamBName}</Text>
+            <Text style={styles.teamPreviewCount}>
+              {matchData.teamBPlayers.length} players
+            </Text>
+          </View>
+        </View>
       </View>
 
       <View style={styles.startOptions}>
         <TouchableOpacity
           style={styles.playNowButton}
-          onPress={() => createMatch(true)}
+          onPress={startCoinToss}
           disabled={loading}
         >
-          <MaterialIcons name="play-circle-filled" size={32} color="#1B5E20" />
-          <Text style={styles.playNowText}>Play Now</Text>
-          <Text style={styles.playNowSubtext}>Start with coin toss</Text>
+          <LinearGradient
+            colors={['#4CAF50', '#2E7D32']}
+            style={styles.gradientButton}
+          >
+            <MaterialIcons name="play-arrow" size={24} color="#FFFFFF" />
+            <Text style={styles.playNowText}>Play Now</Text>
+          </LinearGradient>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.scheduleButton}
-          onPress={() => createMatch(false)}
+          onPress={scheduleMatch}
           disabled={loading}
         >
-          <MaterialIcons name="schedule" size={32} color="#FFD700" />
-          <Text style={styles.scheduleText}>Schedule Match</Text>
-          <Text style={styles.scheduleSubtext}>Notify players & start later</Text>
+          <MaterialIcons name="schedule" size={24} color="#2E7D32" />
+          <Text style={styles.scheduleText}>Schedule for Later</Text>
         </TouchableOpacity>
       </View>
-    </ScrollView>
+    </View>
   );
 
-  const renderPlayerSearchModal = () => (
-    <Modal
-      visible={showPlayerSearch}
-      animationType="slide"
-      presentationStyle="pageSheet"
-    >
-      <SafeAreaView style={styles.modalContainer}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>
-            Add Player to Team {selectedTeam}
-          </Text>
-          <TouchableOpacity onPress={() => setShowPlayerSearch(false)}>
-            <MaterialIcons name="close" size={24} color="#666" />
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.searchContainer}>
-          <MaterialIcons name="search" size={20} color="#666" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search by name or jersey number..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoFocus
-          />
-        </View>
-
-        <FlatList
-          data={filteredUsers}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={[
-                styles.playerSearchItem,
-                isPlayerSelected(item.id) && styles.disabledPlayerItem
-              ]}
-              onPress={() => {
-                if (!isPlayerSelected(item.id)) {
-                  addPlayerToTeam(item, selectedTeam);
-                  setShowPlayerSearch(false);
-                  setSearchQuery('');
-                }
-              }}
-              disabled={isPlayerSelected(item.id)}
-            >
-              <View style={styles.playerSearchInfo}>
-                <MaterialIcons 
-                  name="person" 
-                  size={24} 
-                  color={isPlayerSelected(item.id) ? '#999' : '#2E7D32'} 
-                />
-                <View style={styles.playerSearchDetails}>
-                  <Text style={[
-                    styles.playerSearchName,
-                    isPlayerSelected(item.id) && styles.disabledText
-                  ]}>
-                    {item.name}
-                  </Text>
-                  <Text style={[
-                    styles.playerSearchJersey,
-                    isPlayerSelected(item.id) && styles.disabledText
-                  ]}>
-                    Jersey #{item.jerseyNumber}
-                  </Text>
+  const renderCoinToss = () => (
+    <Modal visible={showCoinToss} animationType="fade" transparent>
+      <View style={styles.coinTossOverlay}>
+        <View style={styles.coinTossContainer}>
+          <Text style={styles.coinTossTitle}>Coin Toss</Text>
+          
+          {!tossResult ? (
+            <View style={styles.coinContainer}>
+              <Animated.View
+                style={[
+                  styles.coin,
+                  {
+                    transform: [
+                      {
+                        rotateY: coinAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: ['0deg', '1800deg'],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                <Text style={styles.coinText}>🪙</Text>
+              </Animated.View>
+              <Text style={styles.coinTossSubtitle}>Flipping...</Text>
+            </View>
+          ) : (
+            <View style={styles.tossResultContainer}>
+              <Text style={styles.tossWinnerText}>
+                {tossResult.winner === 'A' ? matchData.teamAName : matchData.teamBName} wins the toss!
+              </Text>
+              
+              {!tossResult.decision && (
+                <View style={styles.tossDecisionContainer}>
+                  <Text style={styles.tossDecisionTitle}>Choose to:</Text>
+                  <View style={styles.tossButtons}>
+                    <TouchableOpacity
+                      style={styles.tossButton}
+                      onPress={() => handleTossDecision('bat')}
+                    >
+                      <MaterialIcons name="sports-cricket" size={32} color="#FFD700" />
+                      <Text style={styles.tossButtonText}>Bat First</Text>
+                    </TouchableOpacity>
+                    
+                    <TouchableOpacity
+                      style={styles.tossButton}
+                      onPress={() => handleTossDecision('bowl')}
+                    >
+                      <MaterialIcons name="sports-baseball" size={32} color="#FFD700" />
+                      <Text style={styles.tossButtonText}>Bowl First</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-              {isPlayerSelected(item.id) && (
-                <Text style={styles.selectedLabel}>Selected</Text>
               )}
-            </TouchableOpacity>
+            </View>
           )}
-          showsVerticalScrollIndicator={false}
-        />
-      </SafeAreaView>
+          
+          {loading && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#FFD700" />
+              <Text style={styles.loadingText}>Creating match...</Text>
+            </View>
+          )}
+        </View>
+      </View>
     </Modal>
   );
 
-  const renderTossModal = () => (
-    <Modal
-      visible={showTossModal}
-      animationType="fade"
-      transparent
-    >
-      <View style={styles.tossModalOverlay}>
-        <View style={styles.tossModalContent}>
-          <Text style={styles.tossTitle}>🪙 Coin Toss</Text>
-          
-          <Animated.View
-            style={[
-              styles.coinContainer,
-              {
-                transform: [
-                  {
-                    rotateY: coinAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0deg', '1800deg'],
-                    }),
-                  },
-                  { scale: scaleAnim },
-                ],
-              },
-            ]}
-          >
-            <MaterialIcons name="monetization-on" size={80} color="#FFD700" />
-          </Animated.View>
-
-          {!tossResult ? (
+  const renderPlayerSearchModal = () => (
+    <Modal visible={showPlayerSearch} animationType="slide" transparent>
+      <View style={styles.modalOverlay}>
+        <View style={styles.playerSearchContainer}>
+          <View style={styles.searchHeader}>
+            <Text style={styles.searchTitle}>
+              Add Player to Team {selectedTeam}
+            </Text>
             <TouchableOpacity
-              style={styles.tossButton}
-              onPress={performCoinToss}
+              onPress={() => setShowPlayerSearch(false)}
+              style={styles.closeButton}
             >
-              <Text style={styles.tossButtonText}>Flip Coin</Text>
+              <MaterialIcons name="close" size={24} color="#666" />
             </TouchableOpacity>
-          ) : (
-            <View style={styles.tossResult}>
-              <Text style={styles.tossWinnerText}>
-                {tossResult.winner === 'A' ? matchData.teamA.name : matchData.teamB.name} wins the toss!
-              </Text>
-              
-              <Text style={styles.tossDecisionLabel}>Choose to:</Text>
-              <View style={styles.tossDecisionButtons}>
-                <TouchableOpacity
-                  style={[
-                    styles.decisionButton,
-                    tossResult.decision === 'bat' && styles.selectedDecision
-                  ]}
-                  onPress={() => setTossResult(prev => prev ? { ...prev, decision: 'bat' } : null)}
-                >
-                  <Text style={[
-                    styles.decisionText,
-                    tossResult.decision === 'bat' && styles.selectedDecisionText
-                  ]}>
-                    Bat First
-                  </Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[
-                    styles.decisionButton,
-                    tossResult.decision === 'bowl' && styles.selectedDecision
-                  ]}
-                  onPress={() => setTossResult(prev => prev ? { ...prev, decision: 'bowl' } : null)}
-                >
-                  <Text style={[
-                    styles.decisionText,
-                    tossResult.decision === 'bowl' && styles.selectedDecisionText
-                  ]}>
-                    Bowl First
-                  </Text>
-                </TouchableOpacity>
-              </View>
+          </View>
+          
+          <View style={styles.searchInputContainer}>
+            <MaterialIcons name="search" size={20} color="#666" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search by name or jersey number..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoFocus
+            />
+          </View>
 
+          <FlatList
+            data={filteredPlayers}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
               <TouchableOpacity
-                style={styles.startMatchButton}
-                onPress={() => {
-                  setShowTossModal(false);
-                  Alert.alert(
-                    'Match Started! 🏏',
-                    `${matchData.title} has begun! ${tossResult.winner === 'A' ? matchData.teamA.name : matchData.teamB.name} chose to ${tossResult.decision} first.`,
-                    [{ text: 'OK', onPress: () => navigation.goBack() }]
-                  );
-                }}
+                style={styles.playerSearchItem}
+                onPress={() => addPlayerToTeam(item, selectedTeam)}
               >
-                <Text style={styles.startMatchText}>Start Match</Text>
+                <View style={styles.playerSearchInfo}>
+                  <View style={styles.playerSearchAvatar}>
+                    <Text style={styles.playerSearchInitial}>
+                      {item.name.charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                  <View>
+                    <Text style={styles.playerSearchName}>{item.name}</Text>
+                    <Text style={styles.playerSearchJersey}>#{item.jerseyNumber}</Text>
+                  </View>
+                </View>
+                <MaterialIcons name="add-circle" size={24} color="#4CAF50" />
               </TouchableOpacity>
-            </View>
-          )}
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptySearch}>
+                <MaterialIcons name="search-off" size={48} color="#999" />
+                <Text style={styles.emptySearchText}>No players found</Text>
+              </View>
+            }
+          />
         </View>
       </View>
     </Modal>
@@ -831,17 +857,20 @@ export default function CreateMatchScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
-        style={styles.keyboardContainer}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      <LinearGradient
+        colors={['#E8F5E8', '#F1F8E9']}
+        style={styles.gradient}
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.backButton}
+          >
             <MaterialIcons name="arrow-back" size={24} color="#2E7D32" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Create Match</Text>
-          <View style={{ width: 24 }} />
+          <View style={styles.headerSpacer} />
         </View>
 
         {/* Progress Bar */}
@@ -849,42 +878,42 @@ export default function CreateMatchScreen() {
 
         {/* Step Content */}
         <View style={styles.content}>
-          {currentStep === 1 && renderStep1()}
-          {currentStep === 2 && renderStep2()}
-          {currentStep === 3 && renderStep3()}
+          {currentStep === 'match-details' && renderMatchDetailsStep()}
+          {currentStep === 'team-setup' && renderTeamSetupStep()}
+          {currentStep === 'match-start' && renderMatchStartStep()}
         </View>
 
         {/* Navigation Buttons */}
-        <View style={styles.navigationButtons}>
-          {currentStep > 1 && (
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={prevStep}
-            >
-              <MaterialIcons name="arrow-back" size={20} color="#666" />
-              <Text style={styles.backButtonText}>Back</Text>
-            </TouchableOpacity>
-          )}
-          
-          {currentStep < 3 && (
+        {currentStep !== 'match-start' && (
+          <View style={styles.navigationButtons}>
+            {currentStep !== 'match-details' && (
+              <TouchableOpacity
+                style={styles.backStepButton}
+                onPress={prevStep}
+              >
+                <MaterialIcons name="arrow-back" size={20} color="#666" />
+                <Text style={styles.backStepText}>Back</Text>
+              </TouchableOpacity>
+            )}
+            
             <TouchableOpacity
               style={[
-                styles.nextButton,
+                styles.nextStepButton,
                 !validateStep(currentStep) && styles.disabledButton
               ]}
               onPress={nextStep}
               disabled={!validateStep(currentStep)}
             >
-              <Text style={styles.nextButtonText}>Next</Text>
-              <MaterialIcons name="arrow-forward" size={20} color="#1B5E20" />
+              <Text style={styles.nextStepText}>Next</Text>
+              <MaterialIcons name="arrow-forward" size={20} color="#FFFFFF" />
             </TouchableOpacity>
-          )}
-        </View>
+          </View>
+        )}
 
         {/* Modals */}
         {renderPlayerSearchModal()}
-        {renderTossModal()}
-      </KeyboardAvoidingView>
+        {renderCoinToss()}
+      </LinearGradient>
     </SafeAreaView>
   );
 }
@@ -892,71 +921,59 @@ export default function CreateMatchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8F9FA',
   },
-  keyboardContainer: {
+  gradient: {
     flex: 1,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
   },
+  backButton: {
+    padding: 8,
+  },
   headerTitle: {
-    fontSize: 18,
+    flex: 1,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#2E7D32',
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 40,
   },
   progressContainer: {
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
   },
   progressBar: {
     height: 4,
     backgroundColor: '#E0E0E0',
     borderRadius: 2,
-    marginBottom: 12,
+    overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
     backgroundColor: '#4CAF50',
     borderRadius: 2,
   },
-  stepIndicators: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  stepIndicator: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#E0E0E0',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  activeStepIndicator: {
-    backgroundColor: '#4CAF50',
-  },
-  stepText: {
-    fontSize: 14,
-    fontWeight: 'bold',
+  progressText: {
+    fontSize: 12,
     color: '#666',
-  },
-  activeStepText: {
-    color: '#FFFFFF',
+    textAlign: 'center',
+    marginTop: 8,
   },
   content: {
     flex: 1,
+    paddingHorizontal: 16,
   },
   stepContainer: {
     flex: 1,
-    padding: 16,
   },
   stepTitle: {
     fontSize: 24,
@@ -965,22 +982,28 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     textAlign: 'center',
   },
-  inputGroup: {
+  formGroup: {
     marginBottom: 20,
   },
-  inputLabel: {
+  formRow: {
+    flexDirection: 'row',
+    marginBottom: 20,
+  },
+  label: {
     fontSize: 16,
     fontWeight: '600',
     color: '#2E7D32',
     marginBottom: 8,
   },
-  textInput: {
+  input: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 16,
     borderWidth: 1,
     borderColor: '#E0E0E0',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#333',
   },
   optionGrid: {
     flexDirection: 'row',
@@ -990,16 +1013,16 @@ const styles = StyleSheet.create({
   optionCard: {
     width: '48%',
     backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#E0E0E0',
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
     marginBottom: 12,
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
   },
   selectedOption: {
     borderColor: '#4CAF50',
-    backgroundColor: '#E8F5E8',
+    backgroundColor: '#F1F8E9',
   },
   optionText: {
     fontSize: 14,
@@ -1009,55 +1032,73 @@ const styles = StyleSheet.create({
   },
   selectedOptionText: {
     color: '#2E7D32',
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
-  chipContainer: {
+  pickerContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -4,
-  },
-  chip: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    borderRadius: 12,
+    padding: 4,
+  },
+  pickerOption: {
+    flex: 1,
     paddingVertical: 8,
-    paddingHorizontal: 16,
-    margin: 4,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    alignItems: 'center',
   },
-  selectedChip: {
+  selectedPicker: {
     backgroundColor: '#4CAF50',
-    borderColor: '#4CAF50',
   },
-  chipText: {
+  pickerText: {
     fontSize: 14,
     color: '#666',
   },
-  selectedChipText: {
+  selectedPickerText: {
     color: '#FFFFFF',
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
-  ballOption: {
+  radioGroup: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  radioOption: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    margin: 4,
-    borderWidth: 1,
+    borderWidth: 2,
     borderColor: '#E0E0E0',
+    borderRadius: 12,
+    padding: 12,
+    marginHorizontal: 4,
   },
-  rowInputs: {
-    flexDirection: 'row',
+  selectedRadio: {
+    borderColor: '#4CAF50',
+    backgroundColor: '#F1F8E9',
+  },
+  radioText: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 8,
+  },
+  selectedRadioText: {
+    color: '#2E7D32',
+    fontWeight: '600',
+  },
+  teamContainer: {
+    flex: 1,
   },
   teamSection: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   teamHeader: {
     flexDirection: 'row',
@@ -1070,54 +1111,62 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#2E7D32',
   },
-  playerCount: {
+  teamCount: {
     fontSize: 14,
     color: '#666',
-    backgroundColor: '#E8F5E8',
+    backgroundColor: '#F5F5F5',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
   },
   teamNameInput: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 16,
+    backgroundColor: '#F8F9FA',
     borderWidth: 1,
     borderColor: '#E0E0E0',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 16,
+    marginBottom: 16,
   },
   playersContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -4,
+    minHeight: 100,
   },
   playerCard: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: '#E8F5E8',
+    alignItems: 'center',
+    backgroundColor: '#F8F9FA',
     borderRadius: 8,
-    padding: 8,
-    margin: 4,
-    minWidth: '45%',
+    padding: 12,
+    marginBottom: 8,
   },
   playerInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+  },
+  playerAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  playerInitial: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   playerName: {
     fontSize: 14,
-    fontWeight: '500',
-    color: '#2E7D32',
-    marginLeft: 6,
-    flex: 1,
+    fontWeight: '600',
+    color: '#333',
   },
   playerJersey: {
     fontSize: 12,
     color: '#666',
-    marginLeft: 4,
   },
   removeButton: {
     padding: 4,
@@ -1126,23 +1175,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: 8,
-    padding: 12,
-    margin: 4,
-    minWidth: '45%',
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+    backgroundColor: '#F1F8E9',
+    borderWidth: 2,
+    borderColor: '#4CAF50',
     borderStyle: 'dashed',
+    borderRadius: 8,
+    padding: 16,
   },
   addPlayerText: {
     fontSize: 14,
     color: '#2E7D32',
-    marginLeft: 6,
+    fontWeight: '600',
+    marginLeft: 8,
   },
   vsContainer: {
     alignItems: 'center',
-    paddingVertical: 8,
+    marginVertical: 8,
   },
   vsText: {
     fontSize: 20,
@@ -1158,8 +1206,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     padding: 20,
     marginBottom: 24,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
   summaryTitle: {
     fontSize: 20,
@@ -1169,114 +1220,156 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   summarySubtitle: {
-    fontSize: 16,
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  summaryVenue: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  summaryDateTime: {
+    fontSize: 14,
     color: '#666',
     textAlign: 'center',
     marginBottom: 16,
   },
-  summaryDetails: {
-    fontSize: 14,
+  teamsPreview: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  teamPreview: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  teamPreviewName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+  },
+  teamPreviewCount: {
+    fontSize: 12,
     color: '#666',
-    marginBottom: 4,
+  },
+  vsPreview: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFD700',
+    marginHorizontal: 16,
   },
   startOptions: {
     gap: 16,
   },
   playNowButton: {
-    backgroundColor: '#FFD700',
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
+    borderRadius: 12,
+    overflow: 'hidden',
     elevation: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  gradientButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
   },
   playNowText: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#1B5E20',
-    marginTop: 8,
-  },
-  playNowSubtext: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
+    color: '#FFFFFF',
+    marginLeft: 8,
   },
   scheduleButton: {
-    backgroundColor: '#2E7D32',
-    borderRadius: 16,
-    padding: 20,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
   },
   scheduleText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFD700',
-    marginTop: 8,
-  },
-  scheduleSubtext: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    marginTop: 4,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2E7D32',
+    marginLeft: 8,
   },
   navigationButtons: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#FFFFFF',
-    borderTopWidth: 1,
-    borderTopColor: '#E0E0E0',
+    paddingVertical: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
   },
-  backButton: {
+  backStepButton: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#F5F5F5',
     paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  backButtonText: {
-    fontSize: 16,
-    color: '#666',
-    marginLeft: 4,
-  },
-  nextButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FFD700',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     borderRadius: 8,
   },
-  nextButtonText: {
+  backStepText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1B5E20',
-    marginRight: 4,
+    color: '#666',
+    marginLeft: 8,
+  },
+  nextStepButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#4CAF50',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
   },
   disabledButton: {
-    opacity: 0.5,
+    backgroundColor: '#CCCCCC',
   },
-  modalContainer: {
+  nextStepText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    marginRight: 8,
+  },
+  modalOverlay: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
   },
-  modalHeader: {
+  playerSearchContainer: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: SCREEN_HEIGHT * 0.8,
+    paddingBottom: 34,
+  },
+  searchHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#E0E0E0',
   },
-  modalTitle: {
+  searchTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#2E7D32',
   },
-  searchContainer: {
+  closeButton: {
+    padding: 4,
+  },
+  searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#F5F5F5',
@@ -1289,131 +1382,134 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 16,
+    color: '#333',
     marginLeft: 8,
   },
   playerSearchItem: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#F0F0F0',
   },
-  disabledPlayerItem: {
-    opacity: 0.5,
-  },
   playerSearchInfo: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
   },
-  playerSearchDetails: {
-    marginLeft: 12,
-    flex: 1,
+  playerSearchAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#4CAF50',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  playerSearchInitial: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   playerSearchName: {
     fontSize: 16,
-    fontWeight: '500',
-    color: '#2E7D32',
+    fontWeight: '600',
+    color: '#333',
   },
   playerSearchJersey: {
     fontSize: 14,
     color: '#666',
-    marginTop: 2,
   },
-  disabledText: {
+  emptySearch: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptySearchText: {
+    fontSize: 16,
     color: '#999',
+    marginTop: 12,
   },
-  selectedLabel: {
-    fontSize: 12,
-    color: '#4CAF50',
-    fontWeight: 'bold',
-  },
-  tossModalOverlay: {
+  coinTossOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  tossModalContent: {
+  coinTossContainer: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
-    padding: 24,
+    padding: 32,
     alignItems: 'center',
-    width: SCREEN_WIDTH * 0.8,
+    minWidth: 300,
   },
-  tossTitle: {
+  coinTossTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#2E7D32',
-    marginBottom: 24,
+    marginBottom: 32,
   },
   coinContainer: {
-    marginVertical: 24,
-  },
-  tossButton: {
-    backgroundColor: '#FFD700',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 20,
-    marginTop: 16,
-  },
-  tossButtonText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1B5E20',
-  },
-  tossResult: {
     alignItems: 'center',
-    marginTop: 16,
+  },
+  coin: {
+    width: 80,
+    height: 80,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  coinText: {
+    fontSize: 60,
+  },
+  coinTossSubtitle: {
+    fontSize: 16,
+    color: '#666',
+  },
+  tossResultContainer: {
+    alignItems: 'center',
   },
   tossWinnerText: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: 'bold',
-    color: '#2E7D32',
-    marginBottom: 16,
+    color: '#4CAF50',
     textAlign: 'center',
+    marginBottom: 24,
   },
-  tossDecisionLabel: {
+  tossDecisionContainer: {
+    alignItems: 'center',
+  },
+  tossDecisionTitle: {
     fontSize: 16,
     color: '#666',
-    marginBottom: 12,
+    marginBottom: 16,
   },
-  tossDecisionButtons: {
+  tossButtons: {
     flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
+    gap: 16,
   },
-  decisionButton: {
-    backgroundColor: '#F5F5F5',
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-  },
-  selectedDecision: {
-    backgroundColor: '#4CAF50',
+  tossButton: {
+    alignItems: 'center',
+    backgroundColor: '#F1F8E9',
+    borderWidth: 2,
     borderColor: '#4CAF50',
+    borderRadius: 12,
+    padding: 16,
+    minWidth: 100,
   },
-  decisionText: {
+  tossButtonText: {
     fontSize: 14,
-    color: '#666',
+    fontWeight: '600',
+    color: '#2E7D32',
+    marginTop: 8,
   },
-  selectedDecisionText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+  loadingContainer: {
+    alignItems: 'center',
+    marginTop: 24,
   },
-  startMatchButton: {
-    backgroundColor: '#FFD700',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 20,
-  },
-  startMatchText: {
+  loadingText: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#1B5E20',
+    color: '#666',
+    marginTop: 12,
   },
 });
