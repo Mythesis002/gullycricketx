@@ -10,11 +10,14 @@ import {
   Animated,
   Image,
   FlatList,
+  ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { MaterialIcons } from '@expo/vector-icons';
-import { useBasic } from '@basictech/expo';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
+import { supabase } from '../utils/supabaseClient';
+import { followUser, unfollowUser, isFollowing, getFollowersCount, getFollowingCount } from '../utils/followers';
+import * as ImagePicker from 'expo-image-picker';
 
 interface UserProfile {
   id: string;
@@ -36,7 +39,7 @@ interface UserProfile {
 
 interface Post {
   id: string;
-  userId: string;
+  userid: string;
   userName: string;
   text: string;
   imageUrl?: string;
@@ -72,106 +75,96 @@ interface Achievement {
 }
 
 export default function ProfileScreen() {
-  const { db, user, signout } = useBasic();
   const navigation = useNavigation<any>();
-  
+  const route = useRoute();
+  const userIdFromParams = route.params?.userId;
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [userPosts, setUserPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedTab, setSelectedTab] = useState<'stats' | 'posts' | 'achievements'>('stats');
-  
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [viewedUserId, setViewedUserId] = useState<string | null>(null);
+  const [followersCount, setFollowersCount] = useState(0);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [following, setFollowing] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [ballStats, setBallStats] = useState<any>(null);
+
+  useEffect(() => {
+    // Get authenticated user ID on mount
+    const getUserId = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const currentUserId = session?.user?.id || null;
+      setCurrentUserId(currentUserId);
+      setViewedUserId(userIdFromParams || currentUserId);
+    };
+    getUserId();
+  }, [userIdFromParams]);
 
   const initializeProfile = useCallback(async () => {
     await Promise.all([
-      fetchProfile(),
+      fetchProfile(viewedUserId),
       fetchUserPosts()
     ]);
-  }, []);
+  }, [viewedUserId]);
 
   const fetchUserPosts = useCallback(async () => {
+    if (!viewedUserId) return;
     try {
-      const posts = await db?.from('posts').getAll();
+      const { data: posts, error } = await supabase.from('posts').select('*').eq('userid', viewedUserId);
+      if (error) throw error;
       if (posts) {
-        const myPosts = (posts as any[]).filter(post => post.userId === user?.id);
-        setUserPosts(myPosts.sort((a, b) => b.createdAt - a.createdAt));
-        console.log(`📝 Found ${myPosts.length} posts by user`);
+        setUserPosts(posts.sort((a, b) => b.createdAt - a.createdAt));
       }
     } catch (error) {
       console.error('❌ Error fetching user posts:', error);
     }
-  }, [db, user?.id]);
+  }, [viewedUserId]);
 
   useEffect(() => {
+    if (viewedUserId) {
     initializeProfile();
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 1000,
       useNativeDriver: true,
     }).start();
-  }, [initializeProfile, fadeAnim]);
+    }
+  }, [initializeProfile, fadeAnim, viewedUserId]);
 
   useFocusEffect(
     useCallback(() => {
-      fetchUserPosts();
-    }, [fetchUserPosts])
+      if (viewedUserId) fetchUserPosts();
+    }, [fetchUserPosts, viewedUserId])
   );
 
-  const fetchProfile = async () => {
+  useEffect(() => {
+    if (profile?.id) {
+      getFollowersCount(profile.id).then(setFollowersCount);
+      getFollowingCount(profile.id).then(setFollowingCount);
+      if (currentUserId && profile.id !== currentUserId) {
+        isFollowing(profile.id).then(setFollowing);
+      }
+    }
+  }, [profile?.id, currentUserId]);
+
+  const fetchProfile = async (uid: string) => {
+    if (!uid) return;
     try {
-      console.log('🔍 Fetching profile for user:', user?.email);
-      const users = await db?.from('users').getAll();
-      
-      if (users && users.length > 0) {
-        const userProfile = (users as any[])?.find(u => u.email === user?.email);
-        
-        if (userProfile) {
-          setProfile(userProfile as UserProfile);
-          console.log('✅ Profile loaded:', userProfile.name);
+      const { data: user, error } = await supabase.from('users').select('*').eq('id', uid).maybeSingle();
+      if (error) throw error;
+      if (user) {
+        setProfile(user as UserProfile);
         } else {
-          console.log('❌ No profile found for current user');
-          await createDefaultProfile();
-        }
-      } else {
-        console.log('❌ No users found in database');
-        await createDefaultProfile();
+        Alert.alert('Profile not found', 'No profile found for this user.');
       }
     } catch (error) {
-      console.error('❌ Error fetching profile:', error);
-      Alert.alert('Error', 'Failed to load profile');
+      Alert.alert('Error', 'Failed to load profile: ' + (error.message || JSON.stringify(error)));
     } finally {
       setLoading(false);
       setRefreshing(false);
-    }
-  };
-
-  const createDefaultProfile = async () => {
-    try {
-      const defaultProfile = {
-        name: user?.name || 'Cricket Player',
-        email: user?.email || '',
-        jerseyNumber: Math.floor(Math.random() * 99 + 1).toString(),
-        bio: 'Passionate cricket player 🏏',
-        profilePicture: '',
-        matchesPlayed: 0,
-        totalRuns: 0,
-        totalWickets: 0,
-        battingAverage: 0,
-        strikeRate: 0,
-        bowlingAverage: 0,
-        economyRate: 0,
-        badges: '[]',
-        createdAt: Date.now(),
-      };
-
-      const createdProfile = await db?.from('users').add(defaultProfile);
-      if (createdProfile) {
-        setProfile(createdProfile as UserProfile);
-        console.log('✅ Default profile created');
-      }
-    } catch (error) {
-      console.error('❌ Error creating default profile:', error);
     }
   };
 
@@ -191,7 +184,7 @@ export default function ProfileScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await signout();
+              await supabase.auth.signOut();
             } catch (error) {
               Alert.alert('Error', 'Failed to sign out');
             }
@@ -200,6 +193,124 @@ export default function ProfileScreen() {
       ]
     );
   };
+
+  // Function to handle profile picture update
+  const handleProfilePicUpdate = async () => {
+    if (!profile?.id || profile.id !== currentUserId) return;
+    // Ask for permission
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Please grant photo library permissions to update your profile picture.');
+      return;
+    }
+    // Pick image
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+    });
+    if (result.canceled) return;
+    setUploading(true);
+    try {
+      const file = result.assets[0];
+      const fileName = `profile_${profile.id}_${Date.now()}.jpg`;
+      // Upload to Supabase Storage (bucket: 'profileimage')
+      const { data, error } = await supabase.storage.from('profileimage').upload(fileName, {
+        uri: file.uri,
+        type: file.type || 'image/jpeg',
+        name: fileName,
+      });
+      if (error) throw error;
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage.from('profileimage').getPublicUrl(fileName);
+      const publicUrl = publicUrlData?.publicUrl;
+      if (!publicUrl) throw new Error('Failed to get public URL');
+      // Update user profile
+      await supabase.from('users').update({ profilePicture: publicUrl }).eq('id', profile.id);
+      setProfile({ ...profile, profilePicture: publicUrl });
+      Alert.alert('Success', 'Profile picture updated!');
+    } catch (err) {
+      Alert.alert('Error', err.message || 'Failed to update profile picture.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // Fetch and aggregate all stats from ball_by_ball for the user
+  const fetchBallByBallStats = useCallback(async (userId: string) => {
+    if (!userId) return;
+    // Fetch all balls where user is batsman, bowler, or fielder
+    const { data: balls, error } = await supabase
+      .from('ball_by_ball')
+      .select('*')
+      .or(`batsman_id.eq.${userId},bowler_id.eq.${userId},fielder_id.eq.${userId}`);
+    if (error) {
+      Alert.alert('Error', 'Failed to fetch stats: ' + error.message);
+      return;
+    }
+    // Batting stats
+    const ballsBatted = balls.filter(b => b.batsman_id === userId);
+    const matchesPlayed = new Set(ballsBatted.map(b => b.match_id)).size;
+    const totalRuns = ballsBatted.reduce((sum, b) => sum + (b.runs || 0), 0);
+    const ballsFaced = ballsBatted.length;
+    const fours = ballsBatted.filter(b => b.runs === 4).length;
+    const sixes = ballsBatted.filter(b => b.runs === 6).length;
+    // Group by match for highest score, centuries, fifties
+    const runsPerMatch: Record<string, number> = {};
+    ballsBatted.forEach(b => {
+      runsPerMatch[b.match_id] = (runsPerMatch[b.match_id] || 0) + (b.runs || 0);
+    });
+    const highestScore = Object.values(runsPerMatch).length > 0 ? Math.max(...Object.values(runsPerMatch)) : 0;
+    const centuries = Object.values(runsPerMatch).filter(runs => runs >= 100).length;
+    const halfCenturies = Object.values(runsPerMatch).filter(runs => runs >= 50 && runs < 100).length;
+    // Dismissals (outs)
+    const outs = ballsBatted.filter(b => b.dismissal && b.dismissal.batsman_id === userId).length;
+    const battingAverage = outs ? (totalRuns / outs) : totalRuns;
+    const strikeRate = ballsFaced ? (totalRuns / ballsFaced) * 100 : 0;
+    // Bowling stats
+    const ballsBowled = balls.filter(b => b.bowler_id === userId);
+    const runsConceded = ballsBowled.reduce((sum, b) => sum + (b.runs || 0) + (b.extras || 0), 0);
+    const wickets = ballsBowled.filter(b => b.wicket).length;
+    const oversBowled = ballsBowled.length / 6;
+    const bowlingAverage = wickets ? (runsConceded / wickets) : 0;
+    const economyRate = oversBowled > 0 ? (runsConceded / oversBowled) : 0;
+    // Best bowling (max wickets in a match)
+    const wicketsPerMatch: Record<string, number> = {};
+    ballsBowled.forEach(b => {
+      if (b.wicket) {
+        wicketsPerMatch[b.match_id] = (wicketsPerMatch[b.match_id] || 0) + 1;
+      }
+    });
+    const bestBowlingWickets = Object.values(wicketsPerMatch).length > 0 ? Math.max(...Object.values(wicketsPerMatch)) : 0;
+    // Catches
+    const catches = balls.filter(b => b.fielder_id === userId && b.dismissal_type === 'catch').length;
+    setBallStats({
+      matchesPlayed,
+      totalRuns,
+      ballsFaced,
+      fours,
+      sixes,
+      highestScore,
+      centuries,
+      halfCenturies,
+      outs,
+      battingAverage,
+      strikeRate,
+      runsConceded,
+      wickets,
+      oversBowled,
+      bowlingAverage,
+      economyRate,
+      bestBowlingWickets,
+      catches,
+    });
+  }, []);
+
+  // Fetch ball_by_ball stats when viewedUserId changes
+  useEffect(() => {
+    if (viewedUserId) fetchBallByBallStats(viewedUserId);
+  }, [viewedUserId, fetchBallByBallStats]);
 
   // Calculate advanced cricket stats
   const cricketStats: CricketStats = useMemo(() => {
@@ -233,68 +344,62 @@ export default function ProfileScreen() {
     };
   }, [profile]);
 
+  // Update achievements to use ballStats
   const achievements: Achievement[] = useMemo(() => {
-    if (!profile) return [];
-
+    if (!ballStats) return [];
     const achievements: Achievement[] = [];
-    
-    if (cricketStats.centuries > 0) {
+    if (ballStats.centuries > 0) {
       achievements.push({
         id: 'century',
         name: 'Century Maker',
         icon: 'emoji-events',
-        description: `Scored ${cricketStats.centuries} centuries`,
+        description: `Scored ${ballStats.centuries} centuries`,
         dateEarned: new Date().toLocaleDateString(),
         rarity: 'epic'
       });
     }
-
-    if (profile.totalWickets >= 50) {
+    if (ballStats.wickets >= 50) {
       achievements.push({
         id: 'bowler',
         name: 'Wicket Taker',
         icon: 'whatshot',
-        description: `Taken ${profile.totalWickets} wickets`,
+        description: `Taken ${ballStats.wickets} wickets`,
         dateEarned: new Date().toLocaleDateString(),
         rarity: 'rare'
       });
     }
-
-    if (profile.matchesPlayed >= 10) {
+    if (ballStats.matchesPlayed >= 10) {
       achievements.push({
         id: 'veteran',
         name: 'Veteran Player',
         icon: 'star',
-        description: `Played ${profile.matchesPlayed} matches`,
+        description: `Played ${ballStats.matchesPlayed} matches`,
         dateEarned: new Date().toLocaleDateString(),
         rarity: 'common'
       });
     }
-
-    if (profile.strikeRate > 120) {
+    if (ballStats.strikeRate > 120) {
       achievements.push({
         id: 'striker',
         name: 'Power Hitter',
         icon: 'flash-on',
-        description: `Strike rate of ${profile.strikeRate.toFixed(1)}`,
+        description: `Strike rate of ${ballStats.strikeRate.toFixed(1)}`,
         dateEarned: new Date().toLocaleDateString(),
         rarity: 'rare'
       });
     }
-
-    if (profile.battingAverage > 40) {
+    if (ballStats.battingAverage > 40) {
       achievements.push({
         id: 'consistent',
         name: 'Consistent Batsman',
         icon: 'trending-up',
-        description: `Batting average of ${profile.battingAverage.toFixed(1)}`,
+        description: `Batting average of ${ballStats.battingAverage.toFixed(1)}`,
         dateEarned: new Date().toLocaleDateString(),
         rarity: 'epic'
       });
     }
-
     return achievements;
-  }, [profile, cricketStats]);
+  }, [ballStats]);
 
   const formatTimeAgo = (timestamp: number): string => {
     const now = Date.now();
@@ -371,27 +476,25 @@ export default function ProfileScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>🏏 Career Statistics</Text>
         <View style={styles.statsGrid}>
-          {renderStatCard('Matches', profile?.matchesPlayed || 0, 'sports-cricket', '#4CAF50')}
-          {renderStatCard('Total Runs', profile?.totalRuns || 0, 'trending-up', '#FF9800')}
-          {renderStatCard('Wickets', profile?.totalWickets || 0, 'whatshot', '#F44336')}
-          {renderStatCard('Batting Avg', (profile?.battingAverage || 0).toFixed(1), 'bar-chart', '#2196F3')}
-          {renderStatCard('Strike Rate', (profile?.strikeRate || 0).toFixed(1), 'speed', '#9C27B0')}
-          {renderStatCard('Bowl Avg', (profile?.bowlingAverage || 0).toFixed(1), 'sports-baseball', '#607D8B')}
+          {renderStatCard('Matches', ballStats?.matchesPlayed || 0, 'sports-cricket', '#4CAF50')}
+          {renderStatCard('Total Runs', ballStats?.totalRuns || 0, 'trending-up', '#FF9800')}
+          {renderStatCard('Wickets', ballStats?.wickets || 0, 'whatshot', '#F44336')}
+          {renderStatCard('Batting Avg', ballStats?.battingAverage?.toFixed(2) || '0.00', 'bar-chart', '#2196F3')}
+          {renderStatCard('Strike Rate', ballStats?.strikeRate?.toFixed(2) || '0.00', 'speed', '#9C27B0')}
+          {renderStatCard('Bowl Avg', ballStats?.bowlingAverage?.toFixed(2) || '0.00', 'sports-baseball', '#607D8B')}
         </View>
       </View>
-
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>📊 Advanced Analytics</Text>
         <View style={styles.statsGrid}>
-          {renderStatCard('Centuries', cricketStats.centuries, 'emoji-events', '#FFD700', '100+ scores')}
-          {renderStatCard('Half Centuries', cricketStats.halfCenturies, 'star-half', '#FFC107', '50+ scores')}
-          {renderStatCard('Highest Score', cricketStats.highestScore, 'trending-up', '#4CAF50', 'Best innings')}
-          {renderStatCard('Best Bowling', cricketStats.bestBowling, 'whatshot', '#FF5722', 'Best figures')}
-          {renderStatCard('Catches', cricketStats.catches, 'pan-tool', '#2196F3', 'Fielding')}
-          {renderStatCard('Sixes', cricketStats.sixes, 'sports-cricket', '#E91E63', 'Big hits')}
+          {renderStatCard('Centuries', ballStats?.centuries || 0, 'emoji-events', '#FFD700', '100+ scores')}
+          {renderStatCard('Half Centuries', ballStats?.halfCenturies || 0, 'star-half', '#FFC107', '50+ scores')}
+          {renderStatCard('Highest Score', ballStats?.highestScore || 0, 'trending-up', '#4CAF50', 'Best innings')}
+          {renderStatCard('Best Bowling', ballStats?.bestBowlingWickets || 0, 'whatshot', '#FF5722', 'Most wickets in match')}
+          {renderStatCard('Catches', ballStats?.catches || 0, 'pan-tool', '#2196F3', 'Fielding')}
+          {renderStatCard('Sixes', ballStats?.sixes || 0, 'sports-cricket', '#E91E63', 'Big hits')}
         </View>
       </View>
-
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>🎯 Performance Insights</Text>
         <View style={styles.insightCard}>
@@ -399,10 +502,10 @@ export default function ProfileScreen() {
           <View style={styles.insightContent}>
             <Text style={styles.insightTitle}>Your Cricket Journey</Text>
             <Text style={styles.insightText}>
-              {profile?.matchesPlayed === 0 
+              {ballStats?.matchesPlayed === 0 
                 ? "Ready to start your cricket journey! Join a match to begin tracking your stats."
-                : `You've played ${profile?.matchesPlayed} matches and scored ${profile?.totalRuns} runs. ${
-                    profile?.battingAverage > 30 
+                : `You've played ${ballStats?.matchesPlayed} matches and scored ${ballStats?.totalRuns} runs. ${
+                    ballStats?.battingAverage > 30 
                       ? "Excellent batting consistency!" 
                       : "Keep practicing to improve your average!"
                   }`
@@ -470,33 +573,53 @@ export default function ProfileScreen() {
     </ScrollView>
   );
 
+  const handleFollow = async () => {
+    try {
+      await followUser(profile.id);
+      setFollowing(true);
+      setFollowersCount(c => c + 1);
+    } catch (e) {
+      Alert.alert('Error', e.message);
+    }
+  };
+
+  const handleUnfollow = async () => {
+    try {
+      await unfollowUser(profile.id);
+      setFollowing(false);
+      setFollowersCount(c => Math.max(0, c - 1));
+    } catch (e) {
+      Alert.alert('Error', e.message);
+    }
+  };
+
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={{ flex: 1, backgroundColor: '#E8F5E8' }}>
         <View style={styles.loadingContainer}>
           <MaterialIcons name="person" size={60} color="#FFD700" />
           <Text style={styles.loadingText}>Loading profile...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (!profile) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={{ flex: 1, backgroundColor: '#E8F5E8' }}>
         <View style={styles.errorContainer}>
           <MaterialIcons name="error" size={60} color="#FF5722" />
           <Text style={styles.errorText}>Profile not found</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={fetchProfile}>
+          <TouchableOpacity style={styles.retryButton} onPress={() => fetchProfile(viewedUserId)}>
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={{ flex: 1, backgroundColor: '#E8F5E8' }}>
       <ScrollView
         style={styles.scrollContainer}
         refreshControl={
@@ -511,19 +634,58 @@ export default function ProfileScreen() {
       >
         <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
           <View style={styles.profileHeader}>
-            <View style={styles.avatarContainer}>
+            <TouchableOpacity
+              style={styles.avatarContainer}
+              onPress={profile?.id === currentUserId ? handleProfilePicUpdate : undefined}
+              activeOpacity={profile?.id === currentUserId ? 0.7 : 1}
+            >
               {profile.profilePicture ? (
                 <Image source={{ uri: profile.profilePicture }} style={styles.avatarImage} />
               ) : (
                 <MaterialIcons name="person" size={60} color="#1B5E20" />
               )}
+              {/* Edit icon overlay if own profile */}
+              {profile?.id === currentUserId && (
+                <View style={styles.editIconOverlay}>
+                  <MaterialIcons name="edit" size={20} color="#FFD700" />
             </View>
+              )}
+              {uploading && (
+                <View style={styles.uploadingOverlay}>
+                  <ActivityIndicator size="small" color="#FFD700" />
+                </View>
+              )}
+            </TouchableOpacity>
             
             <Text style={styles.playerName}>{profile.name}</Text>
             
             <View style={styles.jerseyContainer}>
               <MaterialIcons name="sports" size={20} color="#FFD700" />
               <Text style={styles.jerseyNumber}>#{profile.jerseyNumber}</Text>
+            </View>
+
+            {/* Followers/Following and Follow/Unfollow button here */}
+            <View style={styles.followRow}>
+              <TouchableOpacity style={styles.followBlock}>
+                <Text style={styles.followCount}>{followersCount}</Text>
+                <Text style={styles.followLabel}>Followers</Text>
+              </TouchableOpacity>
+              <View style={styles.followDivider} />
+              <TouchableOpacity style={styles.followBlock}>
+                <Text style={styles.followCount}>{followingCount}</Text>
+                <Text style={styles.followLabel}>Following</Text>
+              </TouchableOpacity>
+              {profile?.id && currentUserId && profile.id !== currentUserId && (
+                following ? (
+                  <TouchableOpacity onPress={handleUnfollow} style={styles.followBtnUnfollow}>
+                    <Text style={styles.followBtnTextUnfollow}>Unfollow</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity onPress={handleFollow} style={styles.followBtnFollow}>
+                    <Text style={styles.followBtnTextFollow}>Follow</Text>
+                  </TouchableOpacity>
+                )
+              )}
             </View>
             
             {profile.bio && <Text style={styles.bio}>{profile.bio}</Text>}
@@ -534,7 +696,7 @@ export default function ProfileScreen() {
                 <Text style={styles.profileStatLabel}>Posts</Text>
               </View>
               <View style={styles.profileStat}>
-                <Text style={styles.profileStatValue}>{profile.matchesPlayed}</Text>
+                <Text style={styles.profileStatValue}>{ballStats?.matchesPlayed || 0}</Text>
                 <Text style={styles.profileStatLabel}>Matches</Text>
               </View>
               <View style={styles.profileStat}>
@@ -543,13 +705,13 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            <TouchableOpacity 
-              style={styles.editProfileButton}
-              onPress={() => navigation.navigate('EditProfile')}
-            >
-              <MaterialIcons name="edit" size={16} color="#1B5E20" />
-              <Text style={styles.editProfileText}>Edit Profile</Text>
+            {/* Edit Profile Button - only for own profile */}
+            {profile?.id && currentUserId && profile.id === currentUserId && (
+              <TouchableOpacity style={styles.editProfileButton} onPress={() => navigation.navigate('EditProfile')}>
+                <MaterialIcons name="edit" size={20} color="#1B5E20" />
+                <Text style={styles.editProfileButtonText}>Edit Profile</Text>
             </TouchableOpacity>
+            )}
           </View>
 
           <View style={styles.tabContainer}>
@@ -587,42 +749,7 @@ export default function ProfileScreen() {
             {selectedTab === 'achievements' && renderAchievementsTab()}
           </View>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>⚡ Quick Actions</Text>
-            <View style={styles.actionsContainer}>
-              <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => navigation.navigate('Leaderboard')}
-              >
-                <MaterialIcons name="leaderboard" size={24} color="#FFD700" />
-                <Text style={styles.actionText}>Leaderboard</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => navigation.navigate('AllPlayers')}
-              >
-                <MaterialIcons name="people" size={24} color="#FFD700" />
-                <Text style={styles.actionText}>All Players</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => navigation.navigate('CreateTeam')}
-              >
-                <MaterialIcons name="group-add" size={24} color="#FFD700" />
-                <Text style={styles.actionText}>Create Team</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => navigation.navigate('Tournament')}
-              >
-                <MaterialIcons name="emoji-events" size={24} color="#FFD700" />
-                <Text style={styles.actionText}>Tournaments</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          {/* Quick Actions section removed here */}
 
           <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
             <MaterialIcons name="logout" size={24} color="#FF5722" />
@@ -630,7 +757,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </Animated.View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -678,6 +805,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 16,
+    paddingTop: 16,
   },
   profileHeader: {
     backgroundColor: '#FFFFFF',
@@ -762,7 +890,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderRadius: 20,
   },
-  editProfileText: {
+  editProfileButtonText: {
     color: '#1B5E20',
     fontWeight: 'bold',
     marginLeft: 4,
@@ -1078,5 +1206,101 @@ const styles = StyleSheet.create({
     color: '#FF5722',
     fontWeight: 'bold',
     marginLeft: 8,
+  },
+  profileBadgeCard: {
+    alignItems: 'center',
+    marginTop: 24,
+    marginBottom: 24,
+  },
+  profileImageContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: '#FFD700',
+    marginBottom: 12,
+  },
+  profileImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: '#EEE',
+  },
+  profileName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+    marginBottom: 8,
+  },
+  followRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 12,
+    marginBottom: 16,
+  },
+  followBlock: {
+    alignItems: 'center',
+    marginHorizontal: 15,
+  },
+  followCount: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+  },
+  followLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
+  },
+  followDivider: {
+    width: 1,
+    height: '60%',
+    backgroundColor: '#E0E0E0',
+  },
+  followBtnFollow: {
+    backgroundColor: '#FFD700',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+  },
+  followBtnTextFollow: {
+    color: '#1B5E20',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  followBtnUnfollow: {
+    backgroundColor: '#eee',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+  },
+  followBtnTextUnfollow: {
+    color: '#333',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
+  editIconOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 15,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  uploadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 16,
   },
 });

@@ -12,7 +12,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useBasic } from '@basictech/expo';
+import { supabase } from '../utils/supabaseClient';
 
 interface Player {
   id: string;
@@ -27,7 +27,6 @@ interface Player {
 }
 
 export default function AllPlayersScreen() {
-  const { db, user } = useBasic();
   const [players, setPlayers] = useState<Player[]>([]);
   const [filteredPlayers, setFilteredPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,12 +49,10 @@ export default function AllPlayersScreen() {
 
   const fetchPlayers = async () => {
     try {
-      console.log('Fetching all players...');
-      const users = await db?.from('users').getAll();
-      console.log('Found users:', users?.length || 0);
-      
+      const { data: users, error } = await supabase.from('users').select('*');
+      if (error) throw error;
       if (users) {
-        const sortedPlayers = (users as any[])
+        const sortedPlayers = users
           .map(u => ({
             id: u.id,
             name: u.name,
@@ -68,12 +65,9 @@ export default function AllPlayersScreen() {
             createdAt: u.createdAt || Date.now(),
           }))
           .sort((a, b) => b.createdAt - a.createdAt);
-        
         setPlayers(sortedPlayers);
-        console.log('Players loaded:', sortedPlayers.map(p => ({ name: p.name, jersey: p.jerseyNumber })));
       }
     } catch (error) {
-      console.error('Error fetching players:', error);
       Alert.alert('Error', 'Failed to load players');
     } finally {
       setLoading(false);

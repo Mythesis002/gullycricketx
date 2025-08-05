@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { BasicProvider, useBasic } from '@basictech/expo';
 import { MaterialIcons } from '@expo/vector-icons';
 import { View, Text } from 'react-native';
+import { supabase } from './utils/supabaseClient';
+import * as Linking from 'expo-linking';
 
-import { schema } from './basic.config';
 import AuthScreen from './screens/AuthScreen';
 import SocialFeedScreen from './screens/SocialFeedScreen';
 import ProfileScreen from './screens/ProfileScreen';
@@ -29,36 +29,34 @@ import ProfileSetupScreen from './screens/ProfileSetupScreen';
 import DebugScreen from './screens/DebugScreen';
 import AllPlayersScreen from './screens/AllPlayersScreen';
 import AppSummaryScreen from './screens/AppSummaryScreen';
+import ScheduleMatchScreen from './screens/ScheduleMatchScreen';
+import WaitingForApprovalScreen from './screens/WaitingForApprovalScreen';
+import LiveMatchSummaryScreen from './screens/LiveMatchSummaryScreen';
+import TournamentWizardScreen from './screens/TournamentWizardScreen';
+import TournamentDetailScreen from './screens/TournamentDetailScreen';
+import LiveScoringScreen from './screens/LiveScoringScreen';
+import ScorecardScreen from './screens/ScorecardScreen';
+import PlayerSearchScreen from './screens/PlayerSearchScreen';
+import TeamsStack from './screens/TeamsStack';
 
 const Tab = createBottomTabNavigator();
-const Stack = createStackNavigator();
+const RootStack = createStackNavigator();
 
 function MainTabs() {
   return (
     <Tab.Navigator
-      id="MainTabs"
       screenOptions={({ route }) => ({
-        tabBarIcon: ({ focused, color, size }) => {
-          let iconName: keyof typeof MaterialIcons.glyphMap;
-
-          if (route.name === 'Feed') {
-            iconName = 'home';
-          } else if (route.name === 'Teams') {
-            iconName = 'group';
-          } else if (route.name === 'Matches') {
-            iconName = 'sports-cricket';
-          } else if (route.name === 'Profile') {
-            iconName = 'person';
-          } else if (route.name === 'Notifications') {
-            iconName = 'notifications';
-          } else {
-            iconName = 'help';
-          }
-
+        tabBarIcon: ({ color, size }) => {
+          let iconName = 'home';
+          if (route.name === 'Feed') iconName = 'home';
+          else if (route.name === 'Teams') iconName = 'group';
+          else if (route.name === 'Matches') iconName = 'sports-cricket';
+          else if (route.name === 'Profile') iconName = 'person';
+          else if (route.name === 'Notifications') iconName = 'notifications';
           return <MaterialIcons name={iconName} size={size} color={color} />;
         },
         tabBarActiveTintColor: '#FFD700',
-        tabBarInactiveTintColor: '#666',
+        tabBarInactiveTintColor: '#FFFFFF',
         tabBarStyle: {
           backgroundColor: '#2E7D32',
           borderTopWidth: 0,
@@ -80,211 +78,115 @@ function MainTabs() {
       <Tab.Screen 
         name="Feed" 
         component={SocialFeedScreen} 
-        options={{ title: 'GullyCricketX' }}
+        options={{ headerShown: false }}
       />
       <Tab.Screen 
         name="Teams" 
-        component={TeamsScreen} 
-        options={{ title: 'Teams' }}
+        component={TeamsStack} 
+        options={{ headerShown: false }}
       />
       <Tab.Screen 
         name="Matches" 
         component={MatchesScreen} 
-        options={{ title: 'Matches' }}
+        options={{ headerShown: false }}
       />
       <Tab.Screen 
         name="Profile" 
         component={ProfileScreen} 
-        options={{ title: 'Profile' }}
+        options={{ headerShown: false }}
       />
       <Tab.Screen 
         name="Notifications" 
         component={NotificationsScreen} 
-        options={{ title: 'Notifications' }}
+        options={{ headerShown: false }}
       />
     </Tab.Navigator>
   );
 }
 
-function AppStack() {
-  return (
-    <Stack.Navigator
-      id="AppStack"
-      screenOptions={{
-        headerStyle: {
-          backgroundColor: '#2E7D32',
-        },
-        headerTintColor: '#FFD700',
-        headerTitleStyle: {
-          fontWeight: 'bold',
-        },
-      }}
-    >
-      <Stack.Screen 
-        name="MainTabs" 
-        component={MainTabs} 
-        options={{ headerShown: false }}
-      />
-      <Stack.Screen 
-        name="CreatePost" 
-        component={CreatePostScreen} 
-        options={{ title: 'Create Post' }}
-      />
-      <Stack.Screen 
-        name="CreateTeam" 
-        component={CreateTeamScreen} 
-        options={{ title: 'Create Team' }}
-      />
-      <Stack.Screen 
-        name="CreateMatch" 
-        component={CreateMatchScreen} 
-        options={{ title: 'Schedule Match' }}
-      />
-      <Stack.Screen 
-        name="MatchDetail" 
-        component={MatchDetailScreen} 
-        options={{ title: 'Match Details' }}
-      />
-      <Stack.Screen 
-        name="Chat" 
-        component={ChatScreen} 
-        options={{ title: 'Match Chat' }}
-      />
-      <Stack.Screen 
-        name="Analytics" 
-        component={AnalyticsScreen} 
-        options={{ title: 'Match Analytics' }}
-      />
-      <Stack.Screen 
-        name="Tournament" 
-        component={TournamentScreen} 
-        options={{ title: 'Tournaments' }}
-      />
-      <Stack.Screen 
-        name="Leaderboard" 
-        component={LeaderboardScreen} 
-        options={{ title: 'Leaderboard' }}
-      />
-      <Stack.Screen 
-        name="CoinToss" 
-        component={CoinTossScreen} 
-        options={{ title: 'Coin Toss' }}
-      />
-      <Stack.Screen 
-        name="EditProfile" 
-        component={EditProfileScreen} 
-        options={{ title: 'Edit Profile' }}
-      />
-      <Stack.Screen 
-        name="AllPlayers" 
-        component={AllPlayersScreen} 
-        options={{ title: 'All Players' }}
-      />
-      <Stack.Screen 
-        name="AppSummary" 
-        component={AppSummaryScreen} 
-        options={{ title: 'App Overview' }}
-      />
-      <Stack.Screen 
-        name="Debug" 
-        component={DebugScreen} 
-        options={{ title: 'Debug Info' }}
-      />
-    </Stack.Navigator>
-  );
-}
-
 function AppContent() {
-  const { isSignedIn, user, isLoading, db } = useBasic();
-  const [hasProfile, setHasProfile] = useState<boolean | null>(null);
-  const [checkingProfile, setCheckingProfile] = useState(true);
-
-  useEffect(() => {
-    if (isSignedIn && user && db) {
-      checkUserProfile();
-    } else {
-      setCheckingProfile(false);
-      setHasProfile(null);
-    }
-  }, [isSignedIn, user, db]);
-
-  const checkUserProfile = async () => {
-    try {
-      console.log('=== CHECKING USER PROFILE ===');
-      console.log('Current user:', user);
-      console.log('User email:', user?.email);
-      
-      const users = await db?.from('users').getAll();
-      console.log('All users in database:', users?.length || 0);
-      console.log('All user emails:', (users as any[] || []).map(u => u.email));
-      
-      const userProfile = (users as any[])?.find(u => u.email === user?.email);
-      console.log('Found user profile:', userProfile);
-      
-      const profileExists = !!userProfile;
-      setHasProfile(profileExists);
-      
-      console.log('Profile exists:', profileExists);
-      console.log('Will show:', profileExists ? 'Main App' : 'Profile Setup');
-    } catch (error) {
-      console.error('Error checking user profile:', error);
-      setHasProfile(false);
-    } finally {
-      setCheckingProfile(false);
-    }
+  const linking = {
+    prefixes: ['gullycricketx://', 'https://yourapp.com'],
+    config: {
+      screens: {
+        MainTabs: '',
+        TournamentWizard: {
+          path: 'join/tournament/:tournamentId',
+        },
+        // ...other screens
+      },
+    },
   };
-
-  if (isLoading || checkingProfile) {
-    return (
-      <View style={{ 
-        flex: 1, 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        backgroundColor: '#1B5E20' 
-      }}>
-        <MaterialIcons name="sports-cricket" size={60} color="#FFD700" />
-        <Text style={{ 
-          color: '#FFD700', 
-          fontSize: 18, 
-          marginTop: 16, 
-          fontWeight: 'bold' 
-        }}>
-          Loading GullyCricketX...
-        </Text>
-        <Text style={{ 
-          color: '#FFD700', 
-          fontSize: 14, 
-          marginTop: 8 
-        }}>
-          {isLoading ? 'Authenticating...' : 'Checking profile...'}
-        </Text>
-      </View>
-    );
-  }
-
-  console.log('=== RENDERING DECISION ===');
-  console.log('isSignedIn:', isSignedIn);
-  console.log('user:', !!user);
-  console.log('hasProfile:', hasProfile);
-
   return (
-    <NavigationContainer>
-      {isSignedIn && user ? (
-        hasProfile ? <AppStack /> : <ProfileSetupScreen />
-      ) : (
-        <AuthScreen />
-      )}
+    <NavigationContainer linking={linking}>
+      <RootStack.Navigator screenOptions={{ headerShown: false }}>
+        <RootStack.Screen name="MainTabs" component={MainTabs} />
+        <RootStack.Screen name="CreatePost" component={CreatePostScreen} options={{ headerShown: true, title: 'Create Post' }} />
+        <RootStack.Screen name="CreateTeamScreen" component={CreateTeamScreen} options={{ headerShown: true, title: 'Create Team' }} />
+        <RootStack.Screen name="ScheduleMatchScreen" component={ScheduleMatchScreen} options={{ headerShown: true, title: 'Schedule Match' }} />
+        <RootStack.Screen name="CreateMatch" component={CreateMatchScreen} options={{ headerShown: true, title: 'Create Match' }} />
+        <RootStack.Screen name="MatchDetail" component={MatchDetailScreen} options={{ headerShown: true, title: 'Match Details' }} />
+        <RootStack.Screen name="LiveMatchSummaryScreen" component={LiveMatchSummaryScreen} options={{ headerShown: true, title: 'Match Summary' }} />
+        <RootStack.Screen name="Chat" component={ChatScreen} options={{ headerShown: true, title: 'Match Chat' }} />
+        <RootStack.Screen name="Analytics" component={AnalyticsScreen} options={{ headerShown: true, title: 'Match Analytics' }} />
+        <RootStack.Screen name="Tournament" component={TournamentScreen} options={{ headerShown: true, title: 'Tournaments' }} />
+        <RootStack.Screen name="TournamentWizard" component={TournamentWizardScreen} options={{ headerShown: true, title: 'Tournament Wizard' }} />
+        <RootStack.Screen name="TournamentDetail" component={TournamentDetailScreen} options={{ headerShown: true, title: 'Tournament Details' }} />
+        <RootStack.Screen name="LiveScoring" component={LiveScoringScreen} options={{ headerShown: true, title: 'Live Scoring' }} />
+        <RootStack.Screen name="Scorecard" component={ScorecardScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="Leaderboard" component={LeaderboardScreen} options={{ headerShown: true, title: 'Leaderboard' }} />
+        <RootStack.Screen name="CoinTossScreen" component={CoinTossScreen} options={{ headerShown: true, title: 'Coin Toss' }} />
+        <RootStack.Screen name="EditProfile" component={EditProfileScreen} options={{ headerShown: true, title: 'Edit Profile' }} />
+        <RootStack.Screen name="AllPlayers" component={AllPlayersScreen} options={{ headerShown: true, title: 'All Players' }} />
+        <RootStack.Screen name="AppSummary" component={AppSummaryScreen} options={{ headerShown: true, title: 'App Overview' }} />
+        <RootStack.Screen name="Debug" component={DebugScreen} options={{ headerShown: true, title: 'Debug Info' }} />
+        <RootStack.Screen name="ProfileSetup" component={ProfileSetupScreen} options={{ headerShown: true, title: 'Profile Setup' }} />
+        <RootStack.Screen name="ProfileScreen" component={ProfileScreen} options={{ headerShown: false }} />
+        <RootStack.Screen name="WaitingForApprovalScreen" component={WaitingForApprovalScreen} />
+        <RootStack.Screen name="PlayerSearchScreen" component={PlayerSearchScreen} options={{ headerShown: true, title: 'Player Search' }} />
+      </RootStack.Navigator>
     </NavigationContainer>
   );
 }
 
 export default function App() {
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Check session on mount
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => {
+      listener?.subscription.unsubscribe();
+    };
+  }, []);
+
+  if (loading) return null; // Or a splash/loading screen
+
+  // If not logged in, show AuthScreen
+  if (!session) {
+    return (
+      <SafeAreaProvider>
+        <AuthScreen />
+        <StatusBar style="light" />
+      </SafeAreaProvider>
+    );
+  }
+
+  // If logged in, show main app
   return (
     <SafeAreaProvider>
-      <BasicProvider project_id={schema.project_id} schema={schema}>
         <AppContent />
         <StatusBar style="light" />
-      </BasicProvider>
     </SafeAreaProvider>
   );
 }

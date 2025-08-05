@@ -9,14 +9,16 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useBasic } from '@basictech/expo';
 import { useNavigation } from '@react-navigation/native';
+import { supabase } from '../utils/supabaseClient';
+import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 
 export default function EditProfileScreen() {
-  const { db, user } = useBasic();
   const navigation = useNavigation();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -26,33 +28,108 @@ export default function EditProfileScreen() {
   const [jerseyNumber, setJerseyNumber] = useState('');
   const [bio, setBio] = useState('');
   const [originalProfile, setOriginalProfile] = useState<any>(null);
+  const [userId, setUserId] = useState<string | null>(null);
+  const [profileImage, setProfileImage] = useState<string | null>(null);
+  const [userPosts, setUserPosts] = useState<any[]>([]);
+  const [nameAvailable, setNameAvailable] = useState<null | boolean>(null);
+  const [checkingName, setCheckingName] = useState(false);
+  const normalizeName = (input: string) => {
+    return input
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+  const [nameError, setNameError] = useState('');
 
   useEffect(() => {
-    fetchCurrentProfile();
+    // Get authenticated user ID on mount
+    const getUserId = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUserId(session?.user?.id || null);
+    };
+    getUserId();
   }, []);
 
+  useEffect(() => {
+    if (userId) fetchCurrentProfile();
+    if (userId) fetchUserPosts();
+  }, [userId]);
+
+  const handleNameChange = (input: string) => {
+    const normalized = normalizeName(input);
+    setName(normalized);
+    if (!/^[a-z0-9]+( [a-z0-9]+)*$/.test(normalized)) {
+      setNameError('Only lowercase letters, numbers, and single spaces allowed');
+    } else {
+      setNameError('');
+    }
+  };
+
+  useEffect(() => {
+    if (!name.trim() || !originalProfile || !originalProfile.id || nameError) {
+      setNameAvailable(null);
+      return;
+    }
+    setCheckingName(true);
+    const timeout = setTimeout(async () => {
+      const { data: users, error } = await supabase.from('users').select('id').eq('name', name);
+      if (error) {
+        setNameAvailable(null);
+      } else {
+        setNameAvailable(!users || users.length === 0 || (users.length === 1 && users[0].id === originalProfile.id));
+      }
+      setCheckingName(false);
+    }, 400);
+    return () => clearTimeout(timeout);
+  }, [name, originalProfile?.id, nameError]);
+
   const fetchCurrentProfile = async () => {
+    if (!userId) return;
     try {
-      const users = await db?.from('users').getAll();
-      const userProfile = (users as any[])?.find(u => u.email === user?.email);
-      
-      if (userProfile) {
-        setOriginalProfile(userProfile);
-        setName(userProfile.name || '');
-        setJerseyNumber(userProfile.jerseyNumber || '');
-        setBio(userProfile.bio || '');
+      const { data: user, error } = await supabase.from('users').select('*').eq('id', userId).single();
+      if (error) throw error;
+      if (user) {
+        setOriginalProfile(user);
+        setName(user.name || '');
+        setJerseyNumber(user.jerseyNumber || '');
+        setBio(user.bio || '');
       }
     } catch (error) {
-      console.error('Error fetching profile:', error);
       Alert.alert('Error', 'Failed to load profile');
     } finally {
       setLoading(false);
     }
   };
 
-  const validateForm = () => {
+  const fetchUserPosts = async () => {
+    if (!userId) return;
+    try {
+      const { data: posts, error } = await supabase.from('posts').select('*').eq('userid', userId);
+      if (error) throw error;
+      if (posts) {
+        setUserPosts(posts.sort((a, b) => b.createdAt - a.createdAt));
+      }
+    } catch (error) {
+      console.error('Error fetching user posts:', error);
+    }
+  };
+
+  const validateForm = async () => {
     if (!name.trim()) {
       Alert.alert('Validation Error', 'Name is required');
+      return false;
+    }
+    // Check if name is unique (excluding current user)
+    try {
+      const { data: users, error } = await supabase.from('users').select('id').eq('name', name.trim());
+      if (error) throw error;
+      if (users && users.length > 0 && users[0].id !== originalProfile.id) {
+        Alert.alert('Name Taken', 'This name is already taken. Please choose a unique name.');
+        return false;
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to verify name. Please try again.');
       return false;
     }
 
@@ -79,48 +156,88 @@ export default function EditProfileScreen() {
     return true;
   };
 
-  const checkJerseyNumberAvailability = async (newJerseyNumber: string) => {
-    if (newJerseyNumber === originalProfile?.jerseyNumber) {
-      return true; // Same as current, no need to check
-    }
-
+  const pickProfileImage = async () => {
     try {
-      const users = await db?.from('users').getAll();
-      const existingUser = (users as any[])?.find(
-        u => u.jerseyNumber === newJerseyNumber && u.id !== originalProfile?.id
-      );
-      
-      return !existingUser;
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      if (!result.canceled && result.assets[0]) {
+        setProfileImage(result.assets[0].uri);
+      }
     } catch (error) {
-      console.error('Error checking jersey number:', error);
-      return false;
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const uploadProfileImage = async () => {
+    if (!profileImage || !userId) return null;
+    try {
+      // Read file as base64
+      const fileBase64 = await FileSystem.readAsStringAsync(profileImage, { encoding: FileSystem.EncodingType.Base64 });
+      const contentType = 'image/jpeg'; // You can improve this by detecting from file extension
+      const filePath = `${userId}_${Date.now()}.jpg`;
+      // Upload as base64 string
+      const { data, error } = await supabase.storage
+        .from('profile-images')
+        .upload(filePath, Buffer.from(fileBase64, 'base64'), {
+          contentType,
+          upsert: true,
+        });
+      if (error) throw error;
+      // Get public URL
+      const { data: publicUrlData } = supabase.storage.from('profile-images').getPublicUrl(filePath);
+      return publicUrlData?.publicUrl || null;
+    } catch (error) {
+      console.error('Image upload error:', error);
+      Alert.alert('Error', error.message || JSON.stringify(error));
+      return null;
+    }
+  };
+
+  const deleteProfileImage = async () => {
+    if (!originalProfile?.profilePicture) return;
+    try {
+      // Extract file name from URL
+      const urlParts = originalProfile.profilePicture.split('/');
+      const fileName = urlParts[urlParts.length - 1].split('?')[0];
+      const { error } = await supabase.storage.from('profile-images').remove([fileName]);
+      if (error) throw error;
+      // Update user profile to remove image
+      const { error: updateError } = await supabase.from('users').update({ profilePicture: '' }).eq('id', userId);
+      if (updateError) throw updateError;
+      setProfileImage(null);
+      setOriginalProfile({ ...originalProfile, profilePicture: '' });
+      Alert.alert('Removed', 'Profile image removed successfully.');
+    } catch (error) {
+      console.error('Error deleting profile image:', error);
+      Alert.alert('Error', error.message || JSON.stringify(error));
     }
   };
 
   const handleSaveProfile = async () => {
-    if (!validateForm()) return;
-
+    if (!validateForm() || !userId) return;
     setSaving(true);
-
     try {
-      // Check if jersey number is available
-      const isJerseyAvailable = await checkJerseyNumberAvailability(jerseyNumber);
-      if (!isJerseyAvailable) {
-        Alert.alert('Error', 'Jersey number is already taken by another player');
-        setSaving(false);
-        return;
+      // No jersey number uniqueness check
+      // Upload profile image if changed
+      let profilePictureUrl = originalProfile?.profilePicture || '';
+      if (profileImage && profileImage !== originalProfile?.profilePicture) {
+        const uploadedUrl = await uploadProfileImage();
+        if (uploadedUrl) profilePictureUrl = uploadedUrl;
       }
-
       // Update profile
       const updatedProfile = {
-        ...originalProfile,
         name: name.trim(),
         jerseyNumber: jerseyNumber.trim(),
         bio: bio.trim(),
+        profilePicture: profilePictureUrl,
       };
-
-      await db?.from('users').update(originalProfile.id, updatedProfile);
-
+      console.log('Updating profile with:', updatedProfile);
+      const { data: updatedUser, error } = await supabase.from('users').update(updatedProfile).eq('id', userId);
+      if (error) throw error;
       Alert.alert(
         'Success! 🎉',
         'Your profile has been updated successfully!',
@@ -128,10 +245,32 @@ export default function EditProfileScreen() {
       );
     } catch (error) {
       console.error('Error updating profile:', error);
-      Alert.alert('Error', 'Failed to update profile. Please try again.');
+      Alert.alert('Error', error.message || JSON.stringify(error));
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete', style: 'destructive', onPress: async () => {
+            try {
+              const { error } = await supabase.from('posts').delete().eq('id', postId);
+              if (error) throw error;
+              setUserPosts(posts => posts.filter(p => p.id !== postId));
+              Alert.alert('Deleted', 'Post deleted successfully');
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete post');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const hasChanges = () => {
@@ -178,10 +317,27 @@ export default function EditProfileScreen() {
                   placeholder="Enter your full name"
                   placeholderTextColor="#999"
                   value={name}
-                  onChangeText={setName}
+                  onChangeText={handleNameChange}
                   maxLength={50}
+                  autoCapitalize="none"
                 />
+                {checkingName && <MaterialIcons name="hourglass-empty" size={20} color="#999" style={{ marginLeft: 8 }} />}
+                {name.trim() && nameAvailable === true && !checkingName && (
+                  <MaterialIcons name="check-circle" size={20} color="#4CAF50" style={{ marginLeft: 8 }} />
+                )}
+                {name.trim() && nameAvailable === false && !checkingName && (
+                  <MaterialIcons name="cancel" size={20} color="#F44336" style={{ marginLeft: 8 }} />
+                )}
+                {nameError ? (
+                  <Text style={{ color: '#F44336', marginLeft: 8 }}>{nameError}</Text>
+                ) : null}
               </View>
+              {name.trim() && nameAvailable === true && !checkingName && (
+                <Text style={{ color: '#4CAF50', marginLeft: 36, marginTop: 2 }}>Name available</Text>
+              )}
+              {name.trim() && nameAvailable === false && !checkingName && (
+                <Text style={{ color: '#F44336', marginLeft: 36, marginTop: 2 }}>Name not available</Text>
+              )}
               <Text style={styles.fieldHint}>This is how other players will see you</Text>
             </View>
 
@@ -223,6 +379,30 @@ export default function EditProfileScreen() {
                 {bio.length}/150 characters - Share your cricket passion!
               </Text>
             </View>
+
+            {/* Profile Image Field */}
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Profile Image</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <TouchableOpacity style={styles.profileImagePicker} onPress={pickProfileImage}>
+                  {profileImage || originalProfile?.profilePicture ? (
+                    <Image
+                      source={{ uri: profileImage || originalProfile?.profilePicture }}
+                      style={styles.profileImage}
+                    />
+                  ) : (
+                    <MaterialIcons name="person" size={60} color="#FFD700" />
+                  )}
+                  <Text style={styles.changeImageText}>Change Image</Text>
+                </TouchableOpacity>
+                {(profileImage || originalProfile?.profilePicture) && (
+                  <TouchableOpacity onPress={deleteProfileImage} style={{ marginLeft: 12 }}>
+                    <MaterialIcons name="delete" size={28} color="#FF5722" />
+                    <Text style={{ color: '#FF5722', fontSize: 12 }}>Remove Image</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
           </View>
 
           {/* Current Stats Preview */}
@@ -247,14 +427,29 @@ export default function EditProfileScreen() {
             </Text>
           </View>
 
+          {/* User's Posts Section */}
+          <View style={styles.postsSection}>
+            <Text style={styles.sectionTitle}>Your Posts</Text>
+            {userPosts.length === 0 ? (
+              <Text style={styles.noPostsText}>You haven't posted yet.</Text>
+            ) : (
+              userPosts.map(post => (
+                <View key={post.id} style={styles.postItem}>
+                  <Text style={styles.postText}>{post.text}</Text>
+                  <TouchableOpacity onPress={() => handleDeletePost(post.id)} style={styles.deletePostButton}>
+                    <MaterialIcons name="delete" size={20} color="#FF5722" />
+                    <Text style={styles.deletePostText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+          </View>
+
           {/* Save Button */}
           <TouchableOpacity
-            style={[
-              styles.saveButton,
-              { opacity: (!hasChanges() || saving) ? 0.5 : 1 }
-            ]}
+            style={[styles.saveButton, { opacity: !nameAvailable || name === originalProfile.name || !!nameError ? 0.5 : 1 }]}
             onPress={handleSaveProfile}
-            disabled={!hasChanges() || saving}
+            disabled={!nameAvailable || name === originalProfile.name || saving || !!nameError}
           >
             <MaterialIcons 
               name={saving ? "hourglass-empty" : "save"} 
@@ -436,5 +631,63 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 6,
     lineHeight: 20,
+  },
+  profileImagePicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+  },
+  profileImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    marginRight: 16,
+  },
+  changeImageText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#4CAF50',
+  },
+  postsSection: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#2E7D32',
+    marginBottom: 12,
+  },
+  noPostsText: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+  },
+  postItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderWidth: 2,
+    borderColor: '#4CAF50',
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  postText: {
+    fontSize: 16,
+    color: '#333',
+  },
+  deletePostButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  deletePostText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FF5722',
+    marginLeft: 8,
   },
 });

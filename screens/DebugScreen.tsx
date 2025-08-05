@@ -6,209 +6,191 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
+  Share,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useBasic } from '@basictech/expo';
+import { authDebugger, AuthDebugInfo } from '../utils/auth-debugger';
 
 export default function DebugScreen() {
-  const { db, user } = useBasic();
-  const [posts, setPosts] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [debugLogs, setDebugLogs] = useState<AuthDebugInfo[]>([]);
+  const [showAuthLogs, setShowAuthLogs] = useState(false);
 
   useEffect(() => {
-    fetchData();
+    loadDebugLogs();
   }, []);
 
-  const fetchData = async () => {
+  const loadDebugLogs = () => {
+    const logs = authDebugger.getLogs();
+    setDebugLogs(logs);
+  };
+
+  const clearLogs = () => {
+    Alert.alert(
+      'Clear Debug Logs',
+      'Are you sure you want to clear all debug logs?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            authDebugger.clearLogs();
+            setDebugLogs([]);
+          },
+        },
+      ]
+    );
+  };
+
+  const shareDebugReport = async () => {
     try {
-      const fetchedPosts = await db?.from('posts').getAll();
-      const fetchedUsers = await db?.from('users').getAll();
-      
-      console.log('Debug - Posts:', fetchedPosts);
-      console.log('Debug - Users:', fetchedUsers);
-      console.log('Debug - Current user:', user);
-      
-      setPosts(fetchedPosts || []);
-      setUsers(fetchedUsers || []);
+      const report = authDebugger.generateReport();
+      await Share.share({
+        message: report,
+        title: 'GullyCricketX Debug Report',
+      });
     } catch (error) {
-      console.error('Debug error:', error);
-    } finally {
-      setLoading(false);
+      console.error('Error sharing debug report:', error);
     }
   };
 
-  const clearAllPosts = async () => {
-    Alert.alert(
-      'Clear All Posts',
-      'Are you sure you want to delete all posts?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete All',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              for (const post of posts) {
-                await db?.from('posts').delete(post.id);
-              }
-              fetchData();
-              Alert.alert('Success', 'All posts deleted');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete posts');
-            }
-          }
-        }
-      ]
-    );
+  const getAuthStatusColor = () => {
+    if (isLoading) return '#FFA500'; // Orange
+    if (isSignedIn && user) return '#4CAF50'; // Green
+    return '#F44336'; // Red
   };
 
-  const createTestData = async () => {
-    Alert.alert(
-      'Create Test Data',
-      'This will create sample users and posts for testing. Continue?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Create',
-          onPress: async () => {
-            try {
-              // Create test users
-              const testUsers = [
-                {
-                  name: 'Virat Kohli',
-                  email: 'virat@test.com',
-                  jerseyNumber: '18',
-                  bio: 'Captain and aggressive batsman',
-                  matchesPlayed: 15,
-                  totalRuns: 850,
-                  totalWickets: 2,
-                  battingAverage: 56.7,
-                  strikeRate: 135.2,
-                  bowlingAverage: 0,
-                  economyRate: 0,
-                  badges: '["century", "motm"]',
-                  createdAt: Date.now() - 86400000,
-                },
-                {
-                  name: 'MS Dhoni',
-                  email: 'dhoni@test.com',
-                  jerseyNumber: '7',
-                  bio: 'Wicket keeper and finisher',
-                  matchesPlayed: 20,
-                  totalRuns: 720,
-                  totalWickets: 0,
-                  battingAverage: 48.0,
-                  strikeRate: 120.5,
-                  bowlingAverage: 0,
-                  economyRate: 0,
-                  badges: '["teamspirit"]',
-                  createdAt: Date.now() - 172800000,
-                }
-              ];
-
-              for (const testUser of testUsers) {
-                await db?.from('users').add(testUser);
-              }
-
-              // Create test posts
-              const testPosts = [
-                {
-                  userId: 'test1',
-                  userName: 'Virat Kohli',
-                  jerseyNumber: '18',
-                  text: 'Just scored a century in today\'s match! What a game! 🏏💯',
-                  imageUrl: '',
-                  likes: 25,
-                  comments: '[]',
-                  createdAt: Date.now() - 3600000,
-                },
-                {
-                  userId: 'test2',
-                  userName: 'MS Dhoni',
-                  jerseyNumber: '7',
-                  text: 'Great team effort today. Cricket is all about teamwork! 👏',
-                  imageUrl: '',
-                  likes: 18,
-                  comments: '[]',
-                  createdAt: Date.now() - 7200000,
-                }
-              ];
-
-              for (const testPost of testPosts) {
-                await db?.from('posts').add(testPost);
-              }
-
-              fetchData();
-              Alert.alert('Success', 'Test data created successfully!');
-            } catch (error) {
-              console.error('Error creating test data:', error);
-              Alert.alert('Error', 'Failed to create test data');
-            }
-          }
-        }
-      ]
-    );
+  const getAuthStatusText = () => {
+    if (isLoading) return 'Loading...';
+    if (isSignedIn && user) return 'Authenticated';
+    return 'Not Authenticated';
   };
 
-  if (loading) {
+  const renderAuthLog = (log: AuthDebugInfo, index: number) => {
+    const analysis = authDebugger.analyzeAuthError(new Error(log.errorMessage));
+    
     return (
-      <SafeAreaView style={styles.container}>
-        <Text style={styles.loading}>Loading debug data...</Text>
-      </SafeAreaView>
+      <View key={index} style={styles.logItem}>
+        <View style={styles.logHeader}>
+          <Text style={styles.logTimestamp}>
+            {new Date(log.timestamp).toLocaleString()}
+          </Text>
+          <View style={[
+            styles.severityBadge,
+            { backgroundColor: analysis.severity === 'high' ? '#F44336' : 
+                             analysis.severity === 'medium' ? '#FF9800' : '#4CAF50' }
+          ]}>
+            <Text style={styles.severityText}>{analysis.severity.toUpperCase()}</Text>
+          </View>
+        </View>
+        
+        <Text style={styles.logType}>{log.errorType}</Text>
+        <Text style={styles.logMessage}>{log.errorMessage}</Text>
+        <Text style={styles.logCategory}>Category: {analysis.category}</Text>
+        <Text style={styles.logSuggestion}>Suggestion: {analysis.suggestion}</Text>
+        
+        {log.context && (
+          <Text style={styles.logContext}>
+            Context: {JSON.stringify(log.context, null, 2)}
+          </Text>
+        )}
+      </View>
     );
-  }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollContainer}>
+      <ScrollView style={styles.scrollView}>
         <View style={styles.header}>
-          <MaterialIcons name="bug-report" size={24} color="#FFD700" />
-          <Text style={styles.headerTitle}>Debug Information</Text>
+          <MaterialIcons name="bug-report" size={40} color="#FFD700" />
+          <Text style={styles.title}>Debug Information</Text>
         </View>
 
+        {/* Authentication Status */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Current User</Text>
-          <View style={styles.dataContainer}>
-            <Text style={styles.dataText}>
-              {JSON.stringify(user, null, 2)}
-            </Text>
+          <Text style={styles.sectionTitle}>Authentication Status</Text>
+          <View style={styles.statusContainer}>
+            <View style={[styles.statusIndicator, { backgroundColor: getAuthStatusColor() }]} />
+            <Text style={styles.statusText}>{getAuthStatusText()}</Text>
           </View>
+          
+          {user && (
+            <View style={styles.userInfo}>
+              <Text style={styles.userInfoText}>User ID: {user.id}</Text>
+              <Text style={styles.userInfoText}>Email: {user.email}</Text>
+              <Text style={styles.userInfoText}>Name: {user.name}</Text>
+            </View>
+          )}
         </View>
 
+        {/* Authentication Debug Logs */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Posts ({posts.length})</Text>
-            <TouchableOpacity style={styles.clearButton} onPress={clearAllPosts}>
-              <Text style={styles.clearButtonText}>Clear All</Text>
+            <Text style={styles.sectionTitle}>Authentication Debug Logs</Text>
+            <TouchableOpacity onPress={() => setShowAuthLogs(!showAuthLogs)}>
+              <MaterialIcons 
+                name={showAuthLogs ? "expand-less" : "expand-more"} 
+                size={24} 
+                color="#FFD700" 
+              />
             </TouchableOpacity>
           </View>
-          <View style={styles.dataContainer}>
-            <Text style={styles.dataText}>
-              {JSON.stringify(posts, null, 2)}
+          
+          <Text style={styles.logCount}>
+            {debugLogs.length} log entries
             </Text>
+          
+          {showAuthLogs && (
+            <View style={styles.logsContainer}>
+              {debugLogs.length === 0 ? (
+                <Text style={styles.noLogsText}>No debug logs available</Text>
+              ) : (
+                debugLogs.map((log, index) => renderAuthLog(log, index))
+              )}
+            </View>
+          )}
           </View>
+
+        {/* Action Buttons */}
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity style={styles.actionButton} onPress={loadDebugLogs}>
+            <MaterialIcons name="refresh" size={20} color="#1B5E20" />
+            <Text style={styles.actionButtonText}>Refresh Logs</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity style={styles.actionButton} onPress={shareDebugReport}>
+            <MaterialIcons name="share" size={20} color="#1B5E20" />
+            <Text style={styles.actionButtonText}>Share Report</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.clearButton]} 
+            onPress={clearLogs}
+          >
+            <MaterialIcons name="clear" size={20} color="#F44336" />
+            <Text style={[styles.actionButtonText, styles.clearButtonText]}>Clear Logs</Text>
+          </TouchableOpacity>
         </View>
 
+        {/* Troubleshooting Tips */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Users ({users.length})</Text>
-          <View style={styles.dataContainer}>
-            <Text style={styles.dataText}>
-              {JSON.stringify(users, null, 2)}
+          <Text style={styles.sectionTitle}>Troubleshooting Tips</Text>
+          <View style={styles.tipContainer}>
+            <MaterialIcons name="lightbulb" size={20} color="#FFD700" />
+            <Text style={styles.tipText}>
+              If you're experiencing "Failed to exchange code for token" errors:
             </Text>
           </View>
+          <Text style={styles.tipDetail}>
+            • Try refreshing the page and signing in again{'\n'}
+            • Check your internet connection{'\n'}
+            • Clear browser cache and cookies{'\n'}
+            • Try using a different browser or incognito mode{'\n'}
+            • Wait a few minutes before retrying
+          </Text>
         </View>
-
-        <TouchableOpacity style={styles.refreshButton} onPress={fetchData}>
-          <MaterialIcons name="refresh" size={20} color="#1B5E20" />
-          <Text style={styles.refreshButtonText}>Refresh Data</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.testButton} onPress={createTestData}>
-          <MaterialIcons name="science" size={20} color="#1B5E20" />
-          <Text style={styles.testButtonText}>Create Test Data</Text>
-        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -217,34 +199,29 @@ export default function DebugScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#E8F5E8',
+    backgroundColor: '#1B5E20',
   },
-  loading: {
-    textAlign: 'center',
-    marginTop: 50,
-    fontSize: 16,
-    color: '#2E7D32',
-  },
-  scrollContainer: {
+  scrollView: {
     flex: 1,
     padding: 16,
   },
   header: {
-    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 24,
-    paddingBottom: 16,
-    borderBottomWidth: 2,
-    borderBottomColor: '#4CAF50',
   },
-  headerTitle: {
-    fontSize: 18,
+  title: {
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#2E7D32',
-    marginLeft: 12,
+    color: '#FFD700',
+    marginTop: 8,
   },
   section: {
-    marginBottom: 20,
+    backgroundColor: '#2E7D32',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -253,60 +230,152 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#2E7D32',
+    color: '#FFD700',
+    marginBottom: 12,
+  },
+  statusContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 8,
   },
-  dataContainer: {
-    backgroundColor: '#FFFFFF',
+  statusIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  statusText: {
+    fontSize: 16,
+    color: '#E8F5E8',
+    fontWeight: '500',
+  },
+  userInfo: {
+    marginTop: 8,
+  },
+  userInfoText: {
+    fontSize: 14,
+    color: '#E8F5E8',
+    marginBottom: 4,
+  },
+  configText: {
+    fontSize: 14,
+    color: '#E8F5E8',
+    marginBottom: 4,
+  },
+  logCount: {
+    fontSize: 14,
+    color: '#E8F5E8',
+    fontStyle: 'italic',
+    marginBottom: 8,
+  },
+  logsContainer: {
+    maxHeight: 300,
+  },
+  noLogsText: {
+    fontSize: 14,
+    color: '#999',
+    fontStyle: 'italic',
+    textAlign: 'center',
+    padding: 20,
+  },
+  logItem: {
+    backgroundColor: '#1B5E20',
     borderRadius: 8,
     padding: 12,
-    borderWidth: 1,
-    borderColor: '#4CAF50',
+    marginBottom: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#FFD700',
   },
-  dataText: {
+  logHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  logTimestamp: {
     fontSize: 12,
-    color: '#333',
+    color: '#999',
+  },
+  severityBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  severityText: {
+    fontSize: 10,
+    color: '#FFF',
+    fontWeight: 'bold',
+  },
+  logType: {
+    fontSize: 14,
+    color: '#FFD700',
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  logMessage: {
+    fontSize: 14,
+    color: '#E8F5E8',
+    marginBottom: 4,
+  },
+  logCategory: {
+    fontSize: 12,
+    color: '#4CAF50',
+    marginBottom: 2,
+  },
+  logSuggestion: {
+    fontSize: 12,
+    color: '#FFD700',
+    marginBottom: 4,
+  },
+  logContext: {
+    fontSize: 10,
+    color: '#999',
     fontFamily: 'monospace',
   },
+  actionsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 16,
+  },
+  actionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFD700',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 100,
+    justifyContent: 'center',
+  },
+  actionButtonText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#1B5E20',
+    marginLeft: 4,
+  },
   clearButton: {
-    backgroundColor: '#FF5722',
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 6,
+    backgroundColor: '#FFEBEE',
   },
   clearButtonText: {
-    color: '#FFFFFF',
+    color: '#F44336',
+  },
+  tipContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  tipText: {
+    fontSize: 14,
+    color: '#E8F5E8',
+    marginLeft: 8,
+    flex: 1,
+  },
+  tipDetail: {
     fontSize: 12,
-    fontWeight: 'bold',
-  },
-  refreshButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFD700',
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 20,
-  },
-  refreshButtonText: {
-    color: '#1B5E20',
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  testButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#4CAF50',
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 12,
-  },
-  testButtonText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
-    marginLeft: 8,
+    color: '#E8F5E8',
+    lineHeight: 18,
+    marginLeft: 28,
   },
 });

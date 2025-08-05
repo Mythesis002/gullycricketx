@@ -10,11 +10,10 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useBasic } from '@basictech/expo';
 import { useNavigation } from '@react-navigation/native';
+import { supabase } from '../utils/supabaseClient';
 
 export default function AppSummaryScreen() {
-  const { db, user } = useBasic();
   const navigation = useNavigation<any>();
   const [stats, setStats] = useState({
     totalUsers: 0,
@@ -34,37 +33,29 @@ export default function AppSummaryScreen() {
 
   const fetchStats = async () => {
     try {
-      console.log('Fetching app statistics...');
-      
-      // Fetch all data
-      const [users, posts, teams, matches] = await Promise.all([
-        db?.from('users').getAll(),
-        db?.from('posts').getAll(),
-        db?.from('teams').getAll(),
-        db?.from('matches').getAll(),
+      // Fetch all data from Supabase
+      const [usersRes, postsRes, teamsRes, matchesRes] = await Promise.all([
+        supabase.from('users').select('*'),
+        supabase.from('posts').select('*'),
+        supabase.from('teams').select('*').eq('is_deleted', false),
+        supabase.from('matches').select('*'),
       ]);
-
-      console.log('Raw data:', { users: users?.length, posts: posts?.length, teams: teams?.length, matches: matches?.length });
-
+      if (usersRes.error || postsRes.error || teamsRes.error || matchesRes.error) {
+        throw usersRes.error || postsRes.error || teamsRes.error || matchesRes.error;
+      }
+      const users = usersRes.data || [];
+      const posts = postsRes.data || [];
+      const teams = teamsRes.data || [];
+      const matches = matchesRes.data || [];
       // Calculate stats
-      const totalUsers = users?.length || 0;
-      const totalPosts = posts?.length || 0;
-      const totalTeams = teams?.length || 0;
-      const totalMatches = matches?.length || 0;
-
+      const totalUsers = users.length;
+      const totalPosts = posts.length;
+      const totalTeams = teams.length;
+      const totalMatches = matches.length;
       // Get recent items (last 5)
-      const recentUsers = (users as any[] || [])
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .slice(0, 5);
-      
-      const recentPosts = (posts as any[] || [])
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .slice(0, 5);
-      
-      const recentTeams = (teams as any[] || [])
-        .sort((a, b) => b.createdAt - a.createdAt)
-        .slice(0, 5);
-
+      const recentUsers = users.sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
+      const recentPosts = posts.sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
+      const recentTeams = teams.sort((a, b) => b.createdAt - a.createdAt).slice(0, 5);
       setStats({
         totalUsers,
         totalPosts,
@@ -74,19 +65,7 @@ export default function AppSummaryScreen() {
         recentPosts,
         recentTeams,
       });
-
-      console.log('Stats calculated:', {
-        totalUsers,
-        totalPosts,
-        totalTeams,
-        totalMatches,
-        recentUsersCount: recentUsers.length,
-        recentPostsCount: recentPosts.length,
-        recentTeamsCount: recentTeams.length,
-      });
-
     } catch (error) {
-      console.error('Error fetching stats:', error);
       Alert.alert('Error', 'Failed to load statistics');
     } finally {
       setLoading(false);
@@ -191,7 +170,6 @@ export default function AppSummaryScreen() {
             <MaterialIcons name="person" size={24} color="#FFD700" />
             <View style={styles.currentUserInfo}>
               <Text style={styles.currentUserName}>{user?.name || user?.email || 'Unknown'}</Text>
-              <Text style={styles.currentUserEmail}>{user?.email}</Text>
             </View>
           </View>
         </View>
@@ -273,7 +251,7 @@ export default function AppSummaryScreen() {
             
             <TouchableOpacity 
               style={styles.actionButton}
-              onPress={() => navigation.navigate('CreateTeam')}
+              onPress={() => navigation.navigate('TeamDetailsScreen')}
             >
               <MaterialIcons name="group-add" size={24} color="#FFD700" />
               <Text style={styles.actionText}>Create Team</Text>

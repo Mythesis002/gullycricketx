@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,9 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useBasic } from '@basictech/expo';
+import { supabase } from '../utils/supabaseClient';
 
 export default function ProfileSetupScreen() {
-  const { db, user } = useBasic();
   const [currentStep, setCurrentStep] = useState(1);
   const [saving, setSaving] = useState(false);
   
@@ -24,9 +23,52 @@ export default function ProfileSetupScreen() {
   const [jerseyNumber, setJerseyNumber] = useState('');
   const [bio, setBio] = useState('');
 
-  const validateStep1 = () => {
+  const [nameAvailable, setNameAvailable] = useState<null | boolean>(null);
+  const [checkingName, setCheckingName] = useState(false);
+
+  const normalizeName = (input) => {
+    return input
+      .toLowerCase()
+      .replace(/[^a-z0-9 ]+/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+  const [nameError, setNameError] = useState('');
+
+  // Debounced name check
+  useEffect(() => {
+    if (!name.trim() || nameError) {
+      setNameAvailable(null);
+      return;
+    }
+    setCheckingName(true);
+    const timeout = setTimeout(async () => {
+      const { data: users, error } = await supabase.from('users').select('id').eq('name', name);
+      if (error) {
+        setNameAvailable(null);
+      } else {
+        setNameAvailable(!users || users.length === 0);
+      }
+      setCheckingName(false);
+    }, 400);
+    return () => clearTimeout(timeout);
+  }, [name, nameError]);
+
+  const validateStep1 = async () => {
     if (!name.trim()) {
       Alert.alert('Required Field', 'Please enter your name');
+      return false;
+    }
+    // Check if name is unique
+    try {
+      const { data: users, error } = await supabase.from('users').select('id').eq('name', name.trim());
+      if (error) throw error;
+      if (users && users.length > 0) {
+        Alert.alert('Name Taken', 'This name is already taken. Please choose a unique name.');
+        return false;
+      }
+    } catch (error) {
+      Alert.alert('Error', 'Failed to verify name. Please try again.');
       return false;
     }
     return true;
@@ -50,15 +92,13 @@ export default function ProfileSetupScreen() {
 
     // Check if jersey number is available
     try {
-      const users = await db?.from('users').getAll();
-      const existingUser = (users as any[])?.find(u => u.jerseyNumber === jerseyNumber);
-      
-      if (existingUser) {
+      const { data: users, error } = await supabase.from('users').select('*').eq('jerseyNumber', jerseyNumber);
+      if (error) throw error;
+      if (users && users.length > 0) {
         Alert.alert('Number Taken', 'This jersey number is already taken. Please choose another.');
         return false;
       }
     } catch (error) {
-      console.error('Error checking jersey number:', error);
       Alert.alert('Error', 'Failed to verify jersey number. Please try again.');
       return false;
     }
@@ -66,9 +106,19 @@ export default function ProfileSetupScreen() {
     return true;
   };
 
+  const handleNameChange = (input) => {
+    const normalized = normalizeName(input);
+    setName(normalized);
+    if (!/^[a-z0-9]+( [a-z0-9]+)*$/.test(normalized)) {
+      setNameError('Only lowercase letters, numbers, and single spaces allowed');
+    } else {
+      setNameError('');
+    }
+  };
+
   const handleNext = async () => {
     if (currentStep === 1) {
-      if (validateStep1()) {
+      if (await validateStep1()) {
         setCurrentStep(2);
       }
     } else if (currentStep === 2) {
@@ -90,7 +140,7 @@ export default function ProfileSetupScreen() {
     try {
       const profileData = {
         name: name.trim(),
-        email: user?.email || '',
+        email: '',
         jerseyNumber: jerseyNumber.trim(),
         bio: bio.trim(),
         profilePicture: '',
@@ -105,7 +155,7 @@ export default function ProfileSetupScreen() {
         createdAt: Date.now(),
       };
 
-      await db?.from('users').add(profileData);
+      await supabase.from('users').insert(profileData);
 
       Alert.alert(
         'Welcome to GullyCricketX! 🎉',
@@ -137,16 +187,33 @@ export default function ProfileSetupScreen() {
           placeholder="Enter your full name"
           placeholderTextColor="#999"
           value={name}
-          onChangeText={setName}
+          onChangeText={handleNameChange}
           maxLength={50}
           autoFocus
+          autoCapitalize="none"
         />
+        {checkingName && <MaterialIcons name="hourglass-empty" size={20} color="#999" style={{ marginLeft: 8 }} />}
+        {name.trim() && nameAvailable === true && !checkingName && (
+          <MaterialIcons name="check-circle" size={20} color="#4CAF50" style={{ marginLeft: 8 }} />
+        )}
+        {name.trim() && nameAvailable === false && !checkingName && (
+          <MaterialIcons name="cancel" size={20} color="#F44336" style={{ marginLeft: 8 }} />
+        )}
       </View>
+      {nameError ? (
+        <Text style={{ color: '#F44336', marginLeft: 36, marginTop: 2 }}>{nameError}</Text>
+      ) : null}
+      {name.trim() && nameAvailable === true && !checkingName && (
+        <Text style={{ color: '#4CAF50', marginLeft: 36, marginTop: 2 }}>Name available</Text>
+      )}
+      {name.trim() && nameAvailable === false && !checkingName && (
+        <Text style={{ color: '#F44336', marginLeft: 36, marginTop: 2 }}>Name not available</Text>
+      )}
 
       <TouchableOpacity
-        style={[styles.nextButton, { opacity: !name.trim() ? 0.5 : 1 }]}
+        style={[styles.nextButton, { opacity: !name.trim() || !nameAvailable || !!nameError ? 0.5 : 1 }]}
         onPress={handleNext}
-        disabled={!name.trim()}
+        disabled={!name.trim() || !nameAvailable || !!nameError}
       >
         <Text style={styles.nextButtonText}>Next</Text>
         <MaterialIcons name="arrow-forward" size={20} color="#1B5E20" />
@@ -257,14 +324,14 @@ export default function ProfileSetupScreen() {
           {/* Debug Info */}
           <View style={styles.debugContainer}>
             <Text style={styles.debugText}>
-              👤 User: {user?.email || 'No user'}
+              👤 User: No user
             </Text>
             <TouchableOpacity 
               style={styles.debugButton}
               onPress={() => {
                 Alert.alert(
                   'Debug Info',
-                  `User: ${user?.email}\nStep: ${currentStep}\nName: ${name}\nJersey: ${jerseyNumber}`,
+                  `User: \nStep: ${currentStep}\nName: ${name}\nJersey: ${jerseyNumber}`,
                   [{ text: 'OK' }]
                 );
               }}

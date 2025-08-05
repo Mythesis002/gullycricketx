@@ -8,14 +8,16 @@ import {
   RefreshControl,
   Alert,
   Animated,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useBasic } from '@basictech/expo';
+import { useNavigation } from '@react-navigation/native';
+import { supabase } from '../utils/supabaseClient';
 
 interface Notification {
   id: string;
-  userId: string;
+  userid: string;
   title: string;
   message: string;
   type: string;
@@ -24,34 +26,47 @@ interface Notification {
 }
 
 export default function NotificationsScreen() {
-  const { db, user } = useBasic();
+  const navigation = useNavigation();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const fadeAnim = new Animated.Value(0);
+
+  // Simple utility to show 'time ago'
+  function timeAgo(date) {
+    if (!date) return '';
+    const now = new Date();
+    const then = new Date(date);
+    const diff = Math.floor((now - then) / 1000);
+    if (diff < 60) return `${diff} sec ago`;
+    if (diff < 3600) return `${Math.floor(diff/60)} min ago`;
+    if (diff < 86400) return `${Math.floor(diff/3600)} hr ago`;
+    return `${Math.floor(diff/86400)} days ago`;
+  }
 
   useEffect(() => {
     fetchNotifications();
-    Animated.timing(fadeAnim, {
-      toValue: 1,
-      duration: 1000,
-      useNativeDriver: true,
-    }).start();
   }, []);
 
   const fetchNotifications = async () => {
     try {
-      const allNotifications = await db?.from('notifications').getAll();
-      if (allNotifications) {
-        // Filter notifications for current user and sort by newest first
-        const userNotifications = (allNotifications as any[])
-          .filter(notification => notification.userId === user?.id)
-          .sort((a, b) => b.createdAt - a.createdAt);
-        setNotifications(userNotifications);
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (!userId) {
+        setNotifications([]);
+        setLoading(false);
+        return;
       }
+
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('userid', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setNotifications(data || []);
     } catch (error) {
       console.error('Error fetching notifications:', error);
-      Alert.alert('Error', 'Failed to load notifications');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -63,15 +78,26 @@ export default function NotificationsScreen() {
     fetchNotifications();
   };
 
+  const handleNotificationPress = (notification: Notification) => {
+    if (notification.type === 'match_request' && notification.match_request_id) {
+      navigation.navigate('MatchRequestApprovalScreen', { 
+        matchRequestId: notification.match_request_id 
+      });
+    }
+    // Mark as read
+    markAsRead(notification.id);
+  };
+
   const markAsRead = async (notificationId: string) => {
     try {
-      await db?.from('notifications').update(notificationId, { read: true });
-      setNotifications(prevNotifications =>
-        prevNotifications.map(notification =>
-          notification.id === notificationId
-            ? { ...notification, read: true }
-            : notification
-        )
+      await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('id', notificationId);
+      
+      // Update local state
+      setNotifications(prev => 
+        prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
       );
     } catch (error) {
       console.error('Error marking notification as read:', error);
@@ -80,38 +106,30 @@ export default function NotificationsScreen() {
 
   const markAllAsRead = async () => {
     try {
-      const unreadNotifications = notifications.filter(n => !n.read);
-      
-      for (const notification of unreadNotifications) {
-        await db?.from('notifications').update(notification.id, { read: true });
-      }
-      
-      setNotifications(prevNotifications =>
-        prevNotifications.map(notification => ({ ...notification, read: true }))
-      );
-      
-      Alert.alert('Success', 'All notifications marked as read');
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (!userId) return;
+
+      await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('userid', userId)
+        .eq('read', false);
+
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
     } catch (error) {
-      Alert.alert('Error', 'Failed to mark notifications as read');
+      console.error('Error marking all notifications as read:', error);
     }
   };
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'team_invitation':
-        return 'group-add';
-      case 'match_created':
+      case 'match_request':
         return 'sports-cricket';
-      case 'match_update':
-        return 'update';
-      case 'toss_result':
-        return 'monetization-on';
-      case 'match_result':
-        return 'emoji-events';
-      case 'performance_update':
-        return 'trending-up';
-      case 'tournament_update':
-        return 'emoji-events'; // Changed from 'tournament' to valid icon
+      case 'match_accepted':
+        return 'check-circle';
+      case 'match_declined':
+        return 'cancel';
       default:
         return 'notifications';
     }
@@ -119,160 +137,104 @@ export default function NotificationsScreen() {
 
   const getNotificationColor = (type: string) => {
     switch (type) {
-      case 'team_invitation':
-        return '#2196F3';
-      case 'match_created':
-        return '#4CAF50';
-      case 'match_update':
-        return '#FF9800';
-      case 'toss_result':
-        return '#FFD700';
-      case 'match_result':
-        return '#9C27B0';
-      case 'performance_update':
-        return '#00BCD4';
-      case 'tournament_update':
-        return '#FF5722';
+      case 'match_request':
+        return '#4cd137';
+      case 'match_accepted':
+        return '#4cd137';
+      case 'match_declined':
+        return '#ff6b6b';
       default:
-        return '#666';
+        return '#f77f1b';
     }
   };
 
-  const formatTimeAgo = (timestamp: number) => {
-    const now = Date.now();
-    const diff = now - timestamp;
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
-
-    if (days > 0) return `${days}d ago`;
-    if (hours > 0) return `${hours}h ago`;
-    if (minutes > 0) return `${minutes}m ago`;
-    return 'Just now';
-  };
-
-  const renderNotification = ({ item }: { item: Notification }) => {
-    const iconName = getNotificationIcon(item.type);
-    const iconColor = getNotificationColor(item.type);
-    
-    return (
-      <Animated.View style={[styles.notificationCard, { opacity: fadeAnim }]}>
-        <TouchableOpacity
-          style={[
-            styles.notificationContent,
-            !item.read && styles.unreadNotification
-          ]}
-          onPress={() => !item.read && markAsRead(item.id)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.notificationHeader}>
-            <View style={[styles.iconContainer, { backgroundColor: iconColor }]}>
-              <MaterialIcons name={iconName} size={24} color="#FFFFFF" />
-            </View>
-            
-            <View style={styles.notificationInfo}>
-              <Text style={[
-                styles.notificationTitle,
-                !item.read && styles.unreadTitle
-              ]}>
-                {item.title}
-              </Text>
-              <Text style={styles.timeAgo}>{formatTimeAgo(item.createdAt)}</Text>
-            </View>
-            
-            {!item.read && <View style={styles.unreadDot} />}
+  const renderNotification = ({ item }: { item: Notification }) => (
+    <TouchableOpacity
+      style={[
+        styles.notificationCard,
+        !item.read && styles.unreadNotification
+      ]}
+      onPress={() => handleNotificationPress(item)}
+    >
+      <View style={styles.notificationContent}>
+        <View style={styles.notificationHeader}>
+          <View style={[
+            styles.iconContainer,
+            { backgroundColor: getNotificationColor(item.type) }
+          ]}>
+            <MaterialIcons 
+              name={getNotificationIcon(item.type)} 
+              size={20} 
+              color="#fff" 
+            />
           </View>
-          
-          <Text style={styles.notificationMessage}>{item.message}</Text>
-          
-          {/* Action buttons for specific notification types */}
-          {item.type === 'team_invitation' && !item.read && (
-            <View style={styles.actionButtons}>
-              <TouchableOpacity style={styles.acceptButton}>
-                <MaterialIcons name="check" size={16} color="#FFFFFF" />
-                <Text style={styles.actionButtonText}>Accept</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.declineButton}>
-                <MaterialIcons name="close" size={16} color="#FFFFFF" />
-                <Text style={styles.actionButtonText}>Decline</Text>
-              </TouchableOpacity>
-            </View>
-          )}
-        </TouchableOpacity>
-      </Animated.View>
-    );
-  };
-
-  const renderEmptyState = () => (
-    <View style={styles.emptyState}>
-      <MaterialIcons name="notifications-none" size={80} color="#FFD700" />
-      <Text style={styles.emptyTitle}>No Notifications</Text>
-      <Text style={styles.emptySubtitle}>
-        You're all caught up! New notifications will appear here.
-      </Text>
-      <View style={styles.emptyTips}>
-        <Text style={styles.tipsTitle}>💡 You'll get notified about:</Text>
-        <Text style={styles.tipText}>• Team invitations</Text>
-        <Text style={styles.tipText}>• Match updates and results</Text>
-        <Text style={styles.tipText}>• Tournament announcements</Text>
-        <Text style={styles.tipText}>• Performance achievements</Text>
+          <View style={styles.notificationInfo}>
+            <Text style={[
+              styles.notificationTitle,
+              !item.read && styles.unreadTitle
+            ]}>
+              {item.title}
+            </Text>
+            <Text style={styles.timeAgo}>
+              {timeAgo(item.createdAt)}
+            </Text>
+          </View>
+          {!item.read && <View style={styles.unreadDot} />}
+        </View>
+        <Text style={styles.notificationMessage}>{item.message}</Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
-
-  const unreadCount = notifications.filter(n => !n.read).length;
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <MaterialIcons name="notifications" size={60} color="#FFD700" />
-          <Text style={styles.loadingText}>Loading notifications...</Text>
-        </View>
-      </SafeAreaView>
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4cd137" />
+        <Text style={styles.loadingText}>Loading notifications...</Text>
+      </View>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header with mark all as read */}
-      {notifications.length > 0 && (
-        <View style={styles.header}>
-          <View style={styles.headerInfo}>
-            <Text style={styles.headerTitle}>Notifications</Text>
-            {unreadCount > 0 && (
-              <View style={styles.unreadBadge}>
-                <Text style={styles.unreadBadgeText}>{unreadCount}</Text>
-              </View>
-            )}
-          </View>
-          
-          {unreadCount > 0 && (
-            <TouchableOpacity style={styles.markAllButton} onPress={markAllAsRead}>
-              <MaterialIcons name="done-all" size={20} color="#FFD700" />
-              <Text style={styles.markAllText}>Mark all read</Text>
-            </TouchableOpacity>
+      <View style={styles.header}>
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerTitle}>Notifications</Text>
+          {notifications.filter(n => !n.read).length > 0 && (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>
+                {notifications.filter(n => !n.read).length}
+              </Text>
+            </View>
           )}
         </View>
-      )}
+        {notifications.filter(n => !n.read).length > 0 && (
+          <TouchableOpacity style={styles.markAllButton} onPress={markAllAsRead}>
+            <MaterialIcons name="done-all" size={16} color="#FFD700" />
+            <Text style={styles.markAllText}>Mark All Read</Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       <FlatList
         data={notifications}
         renderItem={renderNotification}
-        keyExtractor={item => item.id}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContainer}
         refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            colors={['#FFD700']}
-            tintColor="#FFD700"
-          />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
-        ListEmptyComponent={renderEmptyState}
-        contentContainerStyle={
-          notifications.length === 0 ? styles.emptyContainer : styles.listContainer
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyState}>
+              <MaterialIcons name="notifications-none" size={64} color="#ccc" />
+              <Text style={styles.emptyTitle}>No Notifications</Text>
+              <Text style={styles.emptySubtitle}>
+                You're all caught up! New notifications will appear here.
+      </Text>
+    </View>
+          </View>
         }
-        showsVerticalScrollIndicator={false}
       />
     </SafeAreaView>
   );

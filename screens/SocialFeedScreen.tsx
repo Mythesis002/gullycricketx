@@ -15,17 +15,18 @@ import {
   Modal,
   Pressable,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { MaterialIcons } from '@expo/vector-icons';
-import { useBasic } from '@basictech/expo';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
+import { supabase } from '../utils/supabaseClient';
+import { getFollowingIds } from '../utils/followers';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
 interface Post {
   id: string;
-  userId: string;
+  userid: string;
   userName: string;
   userAvatar?: string;
   jerseyNumber: string;
@@ -56,7 +57,6 @@ interface User {
 }
 
 export default function SocialFeedScreen() {
-  const { db } = useBasic();
   const navigation = useNavigation<any>();
   
   // Core state
@@ -103,41 +103,124 @@ export default function SocialFeedScreen() {
     startFadeAnimation();
   }, [initializeFeed, startFadeAnimation]);
 
-  const fetchPosts = useCallback(async (isRefresh = false) => {
+  const PAGE_SIZE = 5;
+  const [page, setPage] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+
+  const fetchPosts = useCallback(async (pageNum = 0, isRefresh = false, followingOnly = false) => {
     try {
       if (isRefresh) {
         setRefreshing(true);
-      } else if (!refreshing) {
+        setPage(0);
+        setHasMore(true);
+      } else if (!refreshing && pageNum === 0) {
         setLoading(true);
       }
+      setLoadingMore(true);
 
-      console.log('🔄 Fetching posts...');
-      
-      const [fetchedPosts, fetchedUsers] = await Promise.all([
-        db?.from('posts').getAll(),
-        db?.from('users').getAll()
+      let postsQuery = supabase.from('posts').select('*').order('createdAt', { ascending: false });
+      if (followingOnly) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id;
+        if (userId) {
+          const followingIds = await getFollowingIds(userId);
+          if (followingIds.length > 0) {
+            postsQuery = postsQuery.in('userid', followingIds);
+          } else {
+            setPosts([]);
+            setLoading(false);
+            setRefreshing(false);
+            setLoadingMore(false);
+            setHasMore(false);
+            return;
+          }
+        }
+      }
+      const [{ data: fetchedPosts, error: postsError }, { data: fetchedUsers, error: usersError }] = await Promise.all([
+        postsQuery.range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1),
+        supabase.from('users').select('*')
       ]);
-
+      if (postsError || usersError) {
+        throw postsError || usersError;
+      }
       if (fetchedPosts && fetchedUsers) {
         const usersMap = new Map((fetchedUsers as any[]).map(u => [u.id, u]));
-        
-        const enrichedPosts = (fetchedPosts as any[])
-          .map(post => enrichPost(post, usersMap))
-          .sort((a, b) => calculatePostScore(b) - calculatePostScore(a));
-
-        setPosts(enrichedPosts);
+        const enrichedPosts = (fetchedPosts as any[]).map(post => enrichPost(post, usersMap));
         setUsers(fetchedUsers as any[]);
-        
-        console.log('✅ Posts loaded successfully');
+        if (pageNum === 0 || isRefresh) {
+          setPosts(enrichedPosts);
+        } else {
+          setPosts(prev => [...prev, ...enrichedPosts]);
+        }
+        setHasMore(fetchedPosts.length === PAGE_SIZE);
       }
     } catch (error) {
-      console.error('❌ Error fetching posts:', error);
       Alert.alert('Error', 'Failed to load posts. Please try again.');
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setLoadingMore(false);
     }
-  }, [db, refreshing]);
+  }, [refreshing]);
+
+  // Initial load
+  useEffect(() => {
+    fetchPosts(0);
+  }, [fetchPosts]);
+
+  // Update useEffect to fetch posts for selected tab
+  useEffect(() => {
+    if (selectedTab === 'following') {
+      fetchPosts(0, false, true);
+    } else {
+      fetchPosts(0);
+    }
+  }, [fetchPosts, selectedTab]);
+
+  // 1. Fetch and display correct comment count for each post
+  const [commentCounts, setCommentCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    const fetchCommentCounts = async () => {
+      if (posts.length === 0) return;
+      const postIds = posts.map(p => p.id);
+      const { data, error } = await supabase
+        .from('comments')
+        .select('post_id')
+        .in('post_id', postIds);
+      if (!error && data) {
+        // Count comments per post
+        const counts: Record<string, number> = {};
+        data.forEach((row: any) => {
+          counts[row.post_id] = (counts[row.post_id] || 0) + 1;
+        });
+        setCommentCounts(counts);
+      }
+    };
+    fetchCommentCounts();
+  }, [posts]);
+
+  // Remove user search logic and state
+  // Remove: userSearchResults, useEffect for user search, and user search result rendering
+  // Update toggleSearch to navigate to PlayerSearchScreen
+  const toggleSearch = () => {
+    setShowSearch(false);
+    navigation.navigate('PlayerSearchScreen');
+  };
+
+  const loadMorePosts = () => {
+    if (!loadingMore && hasMore) {
+      const nextPage = page + 1;
+      fetchPosts(nextPage);
+      setPage(nextPage);
+    }
+  };
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    setPage(0);
+    fetchPosts(0, true);
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -146,8 +229,7 @@ export default function SocialFeedScreen() {
   );
 
   const enrichPost = (post: any, usersMap: Map<string, any>): Post => {
-    const postUser = usersMap.get(post.userId);
-    
+    const postUser = usersMap.get(post.userid);
     return {
       ...post,
       userName: post.userName || postUser?.name || 'Unknown Player',
@@ -155,12 +237,12 @@ export default function SocialFeedScreen() {
       jerseyNumber: post.jerseyNumber || postUser?.jerseyNumber || '00',
       isLiked: likedPosts.has(post.id),
       isBookmarked: bookmarkedPosts.has(post.id),
-      hashtags: post.hashtags ? JSON.parse(post.hashtags) : [],
+      hashtags: post.hashtags ? (typeof post.hashtags === 'string' ? JSON.parse(post.hashtags) : post.hashtags) : [],
       postType: post.postType || (post.imageUrl ? 'image' : 'text'),
       videoUrl: post.videoUrl || '',
       shares: post.shares || 0,
       location: post.location || '',
-      taggedPlayers: post.taggedPlayers ? JSON.parse(post.taggedPlayers) : [],
+      taggedPlayers: post.taggedPlayers ? (typeof post.taggedPlayers === 'string' ? JSON.parse(post.taggedPlayers) : post.taggedPlayers) : [],
     };
   };
 
@@ -168,7 +250,6 @@ export default function SocialFeedScreen() {
     const now = Date.now();
     const ageHours = (now - post.createdAt) / (1000 * 60 * 60);
     const engagementScore = post.likes + (getCommentsCount(post) * 2) + (post.shares * 3);
-    
     return engagementScore / Math.pow(ageHours + 1, 0.5);
   };
 
@@ -183,12 +264,10 @@ export default function SocialFeedScreen() {
   // Optimized filtering
   const filteredPosts = useMemo(() => {
     let filtered = [...posts];
-
-    // Apply tab filter
     switch (selectedTab) {
       case 'following':
         filtered = filtered.filter(post => {
-          const postUser = users.find(u => u.id === post.userId);
+          const postUser = users.find(u => u.id === post.userid);
           return postUser?.isFollowing;
         });
         break;
@@ -196,8 +275,6 @@ export default function SocialFeedScreen() {
         filtered = filtered.sort((a, b) => (b.likes + getCommentsCount(b)) - (a.likes + getCommentsCount(a)));
         break;
     }
-
-    // Apply search filter
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(post =>
@@ -207,7 +284,6 @@ export default function SocialFeedScreen() {
         post.location?.toLowerCase().includes(query)
       );
     }
-
     return filtered;
   }, [posts, users, selectedTab, searchQuery]);
 
@@ -235,9 +311,12 @@ export default function SocialFeedScreen() {
         )
       );
 
-      await db?.from('posts').update(postId, { likes: newLikes });
+      // Ensure posts table allows UPDATE for authenticated users (RLS policy)
+      const { error } = await supabase.from('posts').update({ likes: newLikes }).eq('id', postId);
+      if (error) throw error;
     } catch (error) {
       console.error('❌ Error liking post:', error);
+      Alert.alert('Error', error.message || JSON.stringify(error));
       fetchPosts();
     }
   };
@@ -276,15 +355,6 @@ export default function SocialFeedScreen() {
   const handleShare = (post: Post) => {
     setSelectedPost(post);
     setShowShareModal(true);
-  };
-
-  const toggleSearch = () => {
-    setShowSearch(!showSearch);
-    Animated.timing(searchAnim, {
-      toValue: showSearch ? 0 : 1,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
   };
 
   const formatTimeAgo = (timestamp: number): string => {
@@ -326,6 +396,12 @@ export default function SocialFeedScreen() {
           >
             <MaterialIcons name="message" size={24} color="#2E7D32" />
           </TouchableOpacity>
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('CreatePost')} 
+            style={styles.headerButton}
+          >
+            <MaterialIcons name="add" size={24} color="#2E7D32" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -364,32 +440,15 @@ export default function SocialFeedScreen() {
 
       {/* Tab Navigation */}
       <View style={styles.tabContainer}>
-        {[
-          { key: 'feed', label: 'Feed', icon: 'home' },
-          { key: 'following', label: 'Following', icon: 'people' },
-          { key: 'explore', label: 'Explore', icon: 'explore' }
-        ].map((tab) => (
-          <TouchableOpacity
-            key={tab.key}
-            style={[
-              styles.tab,
-              selectedTab === tab.key && styles.activeTab
-            ]}
-            onPress={() => setSelectedTab(tab.key as any)}
-          >
-            <MaterialIcons 
-              name={tab.icon as any} 
-              size={20} 
-              color={selectedTab === tab.key ? '#FFD700' : '#666'} 
-            />
-            <Text style={[
-              styles.tabText,
-              selectedTab === tab.key && styles.activeTabText
-            ]}>
-              {tab.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        <TouchableOpacity onPress={() => setSelectedTab('feed')} style={[styles.tab, selectedTab === 'feed' && styles.activeTab]}>
+          <Text style={[styles.tabText, selectedTab === 'feed' && styles.activeTabText]}>Feed</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setSelectedTab('following')} style={[styles.tab, selectedTab === 'following' && styles.activeTab]}>
+          <Text style={[styles.tabText, selectedTab === 'following' && styles.activeTabText]}>Following</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => setSelectedTab('explore')} style={[styles.tab, selectedTab === 'explore' && styles.activeTab]}>
+          <Text style={[styles.tabText, selectedTab === 'explore' && styles.activeTabText]}>Explore</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -405,6 +464,7 @@ export default function SocialFeedScreen() {
       formatTimeAgo={formatTimeAgo}
       fadeAnim={fadeAnim}
       index={index}
+      commentCounts={commentCounts}
     />
   );
 
@@ -438,48 +498,41 @@ export default function SocialFeedScreen() {
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#FFD700" />
           <Text style={styles.loadingText}>Loading your feed...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <FlatList
-        data={filteredPosts}
-        renderItem={renderPost}
-        keyExtractor={(item) => item.id}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmptyState}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => fetchPosts(true)}
-            colors={['#FFD700']}
-            tintColor="#FFD700"
-          />
-        }
-        showsVerticalScrollIndicator={false}
-        removeClippedSubviews={true}
-        maxToRenderPerBatch={5}
-        windowSize={10}
-        initialNumToRender={3}
-        contentContainerStyle={
-          filteredPosts.length === 0 ? styles.emptyContainer : styles.listContainer
-        }
-      />
+    <View style={{ flex: 1, backgroundColor: '#F5F5F5' }}>
+      {/* Only show the feed if not searching for users */}
+      {(searchQuery.trim().length === 0 || !showSearch) && (
+        <FlatList
+          data={filteredPosts}
+          renderItem={renderPost}
+          keyExtractor={(item) => item.id}
+          ListHeaderComponent={renderHeader}
+          ListEmptyComponent={renderEmptyState}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+          onEndReached={loadMorePosts}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={loadingMore ? <ActivityIndicator size="large" color="#FFD700" /> : null}
+          showsVerticalScrollIndicator={false}
+          removeClippedSubviews={true}
+          maxToRenderPerBatch={5}
+          windowSize={10}
+          initialNumToRender={3}
+          contentContainerStyle={
+            filteredPosts.length === 0 ? styles.emptyContainer : styles.listContainer
+          }
+        />
+      )}
 
-      {/* Floating Action Button */}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => navigation.navigate('CreatePost')}
-      >
-        <MaterialIcons name="add" size={28} color="#1B5E20" />
-      </TouchableOpacity>
+
 
       {/* Comments Modal */}
       <CommentsModal
@@ -494,7 +547,7 @@ export default function SocialFeedScreen() {
         post={selectedPost}
         onClose={() => setShowShareModal(false)}
       />
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -509,6 +562,7 @@ const PostCard = React.memo<{
   formatTimeAgo: (timestamp: number) => string;
   fadeAnim: Animated.Value;
   index: number;
+  commentCounts: Record<string, number>;
 }>(({ 
   post, 
   onLike, 
@@ -518,10 +572,12 @@ const PostCard = React.memo<{
   onBookmark,
   formatTimeAgo, 
   fadeAnim, 
-  index 
+  index,
+  commentCounts
 }) => {
   const [imageLoaded, setImageLoaded] = useState(false);
   const heartAnim = useRef(new Animated.Value(0)).current;
+  const navigation = useNavigation();
 
   const handleDoubleTap = () => {
     onDoubleTapLike(post);
@@ -533,13 +589,19 @@ const PostCard = React.memo<{
     ]).start();
   };
 
-  const commentsCount = useMemo(() => {
-    try {
-      return post.comments ? JSON.parse(post.comments).length : 0;
-    } catch {
-      return 0;
-    }
-  }, [post.comments]);
+  // Use commentCounts[post.id] for the count
+  const commentsCount = commentCounts[post.id] || 0;
+
+  // Define scale state for each
+  const likeScale = useRef(new Animated.Value(1)).current;
+  const bookmarkScale = useRef(new Animated.Value(1)).current;
+
+  const animateScale = (animRef: Animated.Value) => {
+    Animated.sequence([
+      Animated.timing(animRef, { toValue: 1.2, duration: 120, useNativeDriver: true }),
+      Animated.timing(animRef, { toValue: 1, duration: 120, useNativeDriver: true })
+    ]).start();
+  };
 
   return (
     <Animated.View 
@@ -558,31 +620,30 @@ const PostCard = React.memo<{
     >
       {/* Post Header */}
       <View style={styles.postHeader}>
-        <View style={styles.userInfo}>
-          <View style={styles.avatar}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+          <TouchableOpacity onPress={() => navigation.navigate('ProfileScreen', { userId: post.userid })} style={{ flexDirection: 'row', alignItems: 'center' }}>
             {post.userAvatar ? (
               <Image source={{ uri: post.userAvatar }} style={styles.avatarImage} />
             ) : (
-              <MaterialIcons name="person" size={24} color="#1B5E20" />
+              <MaterialIcons name="person" size={32} color="#1B5E20" style={{ marginRight: 8 }} />
             )}
-          </View>
-          <View style={styles.userDetails}>
-            <View style={styles.nameRow}>
-              <Text style={styles.userName}>{post.userName}</Text>
-              <MaterialIcons name="verified" size={14} color="#FFD700" />
-              <Text style={styles.jerseyNumber}>#{post.jerseyNumber}</Text>
+            <View style={{ marginLeft: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Text style={styles.userName}>{post.userName}</Text>
+                <Text style={styles.jerseyNumber}>  #{post.jerseyNumber}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+                <Text style={styles.timeAgo}>{formatTimeAgo(post.createdAt)}</Text>
+                {post.location ? (
+                  <View style={styles.locationContainer}>
+                    <Text style={styles.separator}>•</Text>
+                    <MaterialIcons name="location-on" size={12} color="#666" />
+                    <Text style={styles.locationText}>{post.location}</Text>
+                  </View>
+                ) : null}
+              </View>
             </View>
-            <View style={styles.metaRow}>
-              <Text style={styles.timeAgo}>{formatTimeAgo(post.createdAt)}</Text>
-              {post.location && (
-                <View style={styles.locationContainer}>
-                  <Text style={styles.separator}>•</Text>
-                  <MaterialIcons name="location-on" size={12} color="#666" />
-                  <Text style={styles.locationText}>{post.location}</Text>
-                </View>
-              )}
-            </View>
-          </View>
+          </TouchableOpacity>
         </View>
         <TouchableOpacity style={styles.moreButton}>
           <MaterialIcons name="more-vert" size={20} color="#666" />
@@ -637,9 +698,9 @@ const PostCard = React.memo<{
       {/* Engagement Stats */}
       <View style={styles.engagementStats}>
         <Text style={styles.engagementText}>
-          {post.likes > 0 && `${post.likes.toLocaleString()} ${post.likes === 1 ? 'like' : 'likes'}`}
-          {post.likes > 0 && commentsCount > 0 && ' • '}
-          {commentsCount > 0 && `${commentsCount} ${commentsCount === 1 ? 'comment' : 'comments'}`}
+          {`${post.likes || 0} ${post.likes === 1 ? 'like' : 'likes'}`}
+          {commentsCount >= 0 && ' • '}
+          {`${commentsCount || 0} ${commentsCount === 1 ? 'comment' : 'comments'}`}
         </Text>
       </View>
 
@@ -648,13 +709,15 @@ const PostCard = React.memo<{
         <View style={styles.leftActions}>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => onLike(post.id, post.likes)}
+            onPress={() => { animateScale(likeScale); onLike(post.id, post.likes); }}
           >
+            <Animated.View style={{ transform: [{ scale: likeScale }] }}>
             <MaterialIcons 
               name={post.isLiked ? "favorite" : "favorite-border"} 
               size={24} 
               color={post.isLiked ? "#FF3040" : "#666"} 
             />
+            </Animated.View>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -674,15 +737,20 @@ const PostCard = React.memo<{
 
         <TouchableOpacity
           style={styles.actionButton}
-          onPress={() => onBookmark(post.id)}
+          onPress={() => { animateScale(bookmarkScale); onBookmark(post.id); }}
         >
+          <Animated.View style={{ transform: [{ scale: bookmarkScale }] }}>
           <MaterialIcons 
             name={post.isBookmarked ? "bookmark" : "bookmark-border"} 
             size={24} 
             color={post.isBookmarked ? "#FFD700" : "#666"} 
           />
+          </Animated.View>
         </TouchableOpacity>
       </View>
+
+      {/* Add divider line */}
+      <View style={{ height: 1, backgroundColor: '#EEE', marginVertical: 8, marginHorizontal: 16, borderRadius: 1 }} />
     </Animated.View>
   );
 });
@@ -696,23 +764,116 @@ const CommentsModal = ({ visible, post, onClose }: {
   onClose: () => void;
 }) => {
   const [newComment, setNewComment] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const navigation = useNavigation();
 
-  if (!post) return null;
+  useEffect(() => {
+    if (post && visible) {
+      fetchComments();
+    }
+  }, [post, visible]);
+
+  const fetchComments = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('comments')
+        .select('*, users(name, profilePicture)')
+        .eq('post_id', post.id)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      setComments(data || []);
+    } catch (error) {
+      Alert.alert('Error', error.message || JSON.stringify(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendComment = async () => {
+    if (!newComment.trim() || !post) return;
+    setSubmitting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      if (!userId) throw new Error('Not authenticated');
+      const { error } = await supabase.from('comments').insert([{
+        post_id: post.id,
+        user_id: userId,
+        text: newComment.trim(),
+      }]);
+      if (error) throw error;
+      setNewComment('');
+      fetchComments();
+    } catch (error) {
+      Alert.alert('Error', error.message || JSON.stringify(error));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <Modal
       visible={visible}
+      transparent
       animationType="slide"
-      presentationStyle="pageSheet"
     >
-      <SafeAreaView style={styles.modalContainer}>
+      <View style={styles.commentsModalOverlay}>
+        <TouchableOpacity 
+          style={styles.commentsModalBackdrop} 
+          onPress={onClose}
+          activeOpacity={1}
+        />
+        <View style={styles.commentsModalContent}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Comments</Text>
           <TouchableOpacity onPress={onClose}>
             <MaterialIcons name="close" size={24} color="#666" />
           </TouchableOpacity>
         </View>
-        
+        {/* Show existing comments */}
+        {loading ? (
+          <ActivityIndicator size="large" color="#FFD700" style={{ margin: 20 }} />
+        ) : (
+          <FlatList
+            data={comments}
+            keyExtractor={item => item.id}
+            renderItem={({ item }) => (
+              <View style={{
+                flexDirection: 'column',
+                backgroundColor: '#F8F8F8',
+                borderRadius: 12,
+                padding: 14,
+                marginVertical: 10,
+                marginHorizontal: 12,
+                borderWidth: 1,
+                borderColor: '#E0E0E0',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.06,
+                shadowRadius: 4,
+              }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
+                  <TouchableOpacity onPress={() => navigation.navigate('ProfileScreen', { userId: item.user_id })} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    {item.users?.profilePicture ? (
+                      <Image source={{ uri: item.users.profilePicture }} style={{ width: 36, height: 36, borderRadius: 18, marginRight: 10 }} />
+                    ) : (
+                      <MaterialIcons name="person" size={32} color="#FFD700" style={{ marginRight: 10 }} />
+                    )}
+                    <Text style={{ color: '#222', fontWeight: 'bold', fontSize: 15 }}>{item.users?.name || 'User'}</Text>
+                  </TouchableOpacity>
+                  <Text style={{ color: '#999', fontSize: 12, marginLeft: 10, flex: 1, textAlign: 'right' }}>
+                    {item.created_at ? new Date(item.created_at).toLocaleString() : ''}
+                  </Text>
+                </View>
+                <Text style={{ color: '#333', fontSize: 16, marginLeft: 46, marginTop: 2, lineHeight: 22 }}>{item.text}</Text>
+              </View>
+            )}
+            style={{ flex: 1 }}
+          />
+        )}
         <View style={styles.commentInputContainer}>
           <TextInput
             style={styles.commentInput}
@@ -720,12 +881,14 @@ const CommentsModal = ({ visible, post, onClose }: {
             value={newComment}
             onChangeText={setNewComment}
             multiline
+            editable={!submitting}
           />
-          <TouchableOpacity style={styles.sendButton}>
+          <TouchableOpacity style={styles.sendButton} onPress={handleSendComment} disabled={submitting}>
             <MaterialIcons name="send" size={20} color="#FFD700" />
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+        </View>
+      </View>
     </Modal>
   );
 };
@@ -798,8 +961,9 @@ const styles = StyleSheet.create({
   },
   headerContainer: {
     backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
+    borderBottomWidth: 0,
     borderBottomColor: '#E0E0E0',
+    marginTop: 0,
   },
   appHeader: {
     flexDirection: 'row',
@@ -913,6 +1077,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     marginBottom: 1,
     paddingVertical: 12,
+    borderRadius: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   postHeader: {
     flexDirection: 'row',
@@ -948,7 +1118,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   userName: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#000',
     marginRight: 4,
@@ -1040,6 +1210,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
+    paddingBottom: 12,
   },
   leftActions: {
     flexDirection: 'row',
@@ -1067,6 +1238,25 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     backgroundColor: '#FFFFFF',
+  },
+  commentsModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  commentsModalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0)',
+  },
+  commentsModalContent: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '70%',
+    minHeight: '50%',
   },
   modalHeader: {
     flexDirection: 'row',

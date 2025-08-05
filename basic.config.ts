@@ -15,7 +15,7 @@ export const schema = {
           "type": "number",
           "indexed": true
         },
-        "userId": {
+        "userid": {
           "type": "string",
           "indexed": true
         },
@@ -288,7 +288,7 @@ export const schema = {
     "chatMessages": {
       "type": "collection",
       "fields": {
-        "userId": {
+        "userid": {
           "type": "string",
           "indexed": true
         },
@@ -333,7 +333,7 @@ export const schema = {
           "type": "string",
           "indexed": true
         },
-        "userId": {
+        "userid": {
           "type": "string",
           "indexed": true
         },

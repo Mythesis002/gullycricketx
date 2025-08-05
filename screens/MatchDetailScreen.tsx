@@ -11,8 +11,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useBasic } from '@basictech/expo';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { supabase } from '../utils/supabaseClient';
 
 interface Match {
   id: string;
@@ -34,7 +34,6 @@ interface Match {
 }
 
 export default function MatchDetailScreen() {
-  const { db, user } = useBasic();
   const navigation = useNavigation();
   const route = useRoute();
   const { matchId } = route.params as { matchId: string };
@@ -55,9 +54,12 @@ export default function MatchDetailScreen() {
 
   const fetchMatchDetails = async () => {
     try {
-      const fetchedMatch = await db?.from('matches').get(matchId);
-      if (fetchedMatch) {
-        setMatch(fetchedMatch as any);
+      const { data } = await supabase
+        .from('matches')
+        .select()
+        .eq('id', matchId);
+      if (data && data.length > 0) {
+        setMatch(data[0] as any);
       }
     } catch (error) {
       console.error('Error fetching match details:', error);

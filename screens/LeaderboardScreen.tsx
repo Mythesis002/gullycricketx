@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useBasic } from '@basictech/expo';
+import { supabase } from '../utils/supabaseClient';
 
 interface Player {
   id: string;
@@ -30,7 +30,6 @@ interface Player {
 type LeaderboardCategory = 'runs' | 'wickets' | 'average' | 'strike_rate' | 'matches';
 
 export default function LeaderboardScreen() {
-  const { db } = useBasic();
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -48,12 +47,12 @@ export default function LeaderboardScreen() {
 
   const fetchPlayers = async () => {
     try {
-      const fetchedPlayers = await db?.from('users').getAll();
+      const { data: fetchedPlayers, error } = await supabase.from('users').select('*');
+      if (error) throw error;
       if (fetchedPlayers) {
         setPlayers(fetchedPlayers as any[]);
       }
     } catch (error) {
-      console.error('Error fetching players:', error);
       Alert.alert('Error', 'Failed to load leaderboard');
     } finally {
       setLoading(false);

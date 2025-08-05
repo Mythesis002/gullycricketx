@@ -12,8 +12,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialIcons } from '@expo/vector-icons';
-import { useBasic } from '@basictech/expo';
 import { useRoute, useNavigation } from '@react-navigation/native';
+import { supabase } from '../utils/supabaseClient';
 
 interface MatchAnalytic {
   id: string;
@@ -34,9 +34,8 @@ interface MatchAnalytic {
 }
 
 export default function AnalyticsScreen() {
-  const { db, user } = useBasic();
-  const navigation = useNavigation();
   const route = useRoute();
+  const navigation = useNavigation();
   const { matchId } = route.params as { matchId: string };
   
   const [runs, setRuns] = useState('');
@@ -56,9 +55,9 @@ export default function AnalyticsScreen() {
 
   const fetchExistingAnalytics = async () => {
     try {
-      const analytics = await db?.from('matchAnalytics').getAll();
+      const analytics = await supabase.from('matchAnalytics').select('*');
       if (analytics) {
-        const userAnalytic = (analytics as any[]).find(
+        const userAnalytic = analytics.find(
           a => a.matchId === matchId && a.playerId === user?.id
         );
         
@@ -118,7 +117,7 @@ export default function AnalyticsScreen() {
 
     try {
       // Get current user profile
-      const users = await db?.from('users').getAll();
+      const users = await supabase.from('users').select('*');
       const currentUser = users?.find(u => u.email === user?.email);
 
       const analyticsData = {
@@ -140,37 +139,10 @@ export default function AnalyticsScreen() {
 
       if (existingAnalytics) {
         // Update existing analytics
-        await db?.from('matchAnalytics').update(existingAnalytics.id, analyticsData);
+        await supabase.from('matchAnalytics').update(analyticsData).eq('id', existingAnalytics.id);
       } else {
         // Create new analytics
-        await db?.from('matchAnalytics').add(analyticsData);
-      }
-
-      // Get match details to notify captains
-      const match = await db?.from('matches').get(matchId);
-      if (match) {
-        const notifications = [
-          {
-            userId: match.teamAId, // Assuming this is captain ID
-            title: 'Performance Verification Needed 📊',
-            message: `${currentUser?.name} has submitted match performance data. Please review and approve.`,
-            type: 'performance_update',
-            read: false,
-            createdAt: Date.now(),
-          },
-          {
-            userId: match.teamBId, // Assuming this is captain ID
-            title: 'Performance Verification Needed 📊',
-            message: `${currentUser?.name} has submitted match performance data. Please review and approve.`,
-            type: 'performance_update',
-            read: false,
-            createdAt: Date.now(),
-          }
-        ];
-
-        for (const notification of notifications) {
-          await db?.from('notifications').add(notification);
-        }
+        await supabase.from('matchAnalytics').insert(analyticsData);
       }
 
       Alert.alert(
