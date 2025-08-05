@@ -1,4 +1,6 @@
 import { Platform } from 'react-native';
+import React from 'react';
+
 const webTargetOrigins = [
   "http://localhost:8081", // Your parent dev server
   "https://kiki.dev",       // Your production parent
