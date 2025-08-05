@@ -25,16 +25,10 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
+      "output": "single",
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      [
-        "expo-router",
-        {
-          "origin": "https://project-83364bf5.dev.kiki.dev"
-        }
-      ],
       [
         "expo-splash-screen",
         {
