@@ -30,6 +30,12 @@
     },
     "plugins": [
       [
+        "expo-router",
+        {
+          "origin": "https://project-83364bf5.dev.kiki.dev"
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
@@ -41,6 +47,8 @@
       "expo-font",
       "expo-web-browser"
     ],
-
+    "experiments": {
+      "typedRoutes": true
+    }
   }
 }

@@ -1,15 +1,15 @@
 {
-  "name": "gully-cricket-x",
+  "name": "user-app-53",
   "version": "1.0.0",
   "main": "index.ts",
-  "private": true,
   "scripts": {
     "start": "expo start --web",
     "build": "expo export --platform web",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "export": "expo export --platform web"
   },
   "dependencies": {
     "@basictech/expo": "^0.0.5",
@@ -32,6 +32,7 @@
     "expo-image-picker": "~16.1.4",
     "expo-linking": "~7.1.3",
     "expo-location": "~18.1.5",
+    "expo-router": "~5.1.1",
     "expo-splash-screen": "~0.30.9",
     "expo-status-bar": "~2.2.2",
     "expo-symbols": "~0.4.5",
@@ -47,7 +48,8 @@
     "react-native-safe-area-context": "5.4.0",
     "react-native-screens": "~4.11.1",
     "react-native-web": "^0.20.0",
-    "react-native-webview": "13.13.5"
+    "react-native-webview": "13.13.5",
+    "express": "^4.18.2"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
