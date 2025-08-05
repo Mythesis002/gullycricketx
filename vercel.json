@@ -1,7 +1,7 @@
 {
   "buildCommand": "npx expo export --platform web",
   "outputDirectory": "dist",
-  "framework": "expo",
+  "framework": "vite",
   "installCommand": "npm install",
   "devCommand": "npx expo start --web"
 } 
