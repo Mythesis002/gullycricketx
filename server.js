@@ -1,20 +1,37 @@
 const express = require('express');
-const path = require('path');
+const { spawn } = require('child_process');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Serve static files from the web-build directory (if it exists)
-app.use(express.static(path.join(__dirname, 'web-build')));
-
-// If web-build doesn't exist, serve from the root directory
-app.use(express.static(path.join(__dirname)));
-
-// Handle all routes by serving index.html
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ status: 'ok', message: 'GullyCricketX is running' });
 });
 
+// Serve static files
+app.use(express.static(__dirname));
+
+// Serve index.html for all other routes
+app.get('*', (req, res) => {
+  res.sendFile(__dirname + '/index.html');
+});
+
+// Start the server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
-  console.log(`Health check available at http://localhost:${PORT}/`);
+  console.log(`Health check available at http://localhost:${PORT}/health`);
+  
+  // Start Expo in the background
+  const expo = spawn('npx', ['expo', 'start', '--web', '--no-dev', '--minify'], {
+    stdio: 'pipe',
+    shell: true
+  });
+  
+  expo.stdout.on('data', (data) => {
+    console.log(`Expo: ${data}`);
+  });
+  
+  expo.stderr.on('data', (data) => {
+    console.log(`Expo Error: ${data}`);
+  });
 }); 

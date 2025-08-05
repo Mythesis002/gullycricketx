@@ -48,13 +48,20 @@
         <div class="logo">🏏 GullyCricketX</div>
         <div class="loading">Loading your cricket app...</div>
         <div class="spinner"></div>
-        <p>If the app doesn't load automatically, please check the Railway deployment logs.</p>
+        <p>Your GullyCricketX app is starting up...</p>
+        <p>Status: <span id="status">Initializing...</span></p>
     </div>
     <script>
-        // Try to redirect to the Expo web app if it's available
-        setTimeout(() => {
-            window.location.href = '/web-build/index.html';
-        }, 2000);
+        // Health check response
+        fetch('/health')
+            .then(response => {
+                if (response.ok) {
+                    document.getElementById('status').textContent = 'App is running!';
+                }
+            })
+            .catch(() => {
+                document.getElementById('status').textContent = 'App is starting...';
+            });
     </script>
 </body>
 </html> 
