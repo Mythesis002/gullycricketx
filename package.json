@@ -1,7 +1,8 @@
 {
-  "name": "user-app-53",
+  "name": "gully-cricket-x",
   "version": "1.0.0",
   "main": "index.ts",
+  "private": true,
   "scripts": {
     "start": "expo start --web",
     "build": "expo export --platform web",
