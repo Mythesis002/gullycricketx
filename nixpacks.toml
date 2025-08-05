@@ -4,5 +4,5 @@ nixPkgs = ["nodejs", "yarn"]
 [phases.install]
 cmds = ["yarn install"]
 
-[start]
+[phases.start]
 cmd = "yarn start" 
