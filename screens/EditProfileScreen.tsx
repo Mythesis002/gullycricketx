@@ -16,7 +16,7 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '../utils/supabaseClient';
 import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 export default function EditProfileScreen() {
   const navigation = useNavigation();
@@ -175,20 +175,37 @@ export default function EditProfileScreen() {
   const uploadProfileImage = async () => {
     if (!profileImage || !userId) return null;
     try {
-      // Read file as base64
-      const fileBase64 = await FileSystem.readAsStringAsync(profileImage, { encoding: FileSystem.EncodingType.Base64 });
-      const contentType = 'image/jpeg'; // You can improve this by detecting from file extension
-      const filePath = `${userId}_${Date.now()}.jpg`;
-      // Upload as base64 string
-      const { data, error } = await supabase.storage
-        .from('profile-images')
-        .upload(filePath, Buffer.from(fileBase64, 'base64'), {
-          contentType,
-          upsert: true,
-        });
-      if (error) throw error;
+      // Compress and resize the image using ImageManipulator (same as post images)
+      const manipResult = await ImageManipulator.manipulateAsync(
+        profileImage,
+        [{ resize: { width: 400 } }], // Smaller size for profile images
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      
+      const fileName = `profile_${userId}_${Date.now()}.jpg`;
+      
+      // Handle upload differently for web vs mobile (same as post images)
+      if (Platform.OS === 'web') {
+        // Web: Convert to blob
+        const imageBlob = await fetch(manipResult.uri).then(res => res.blob());
+        const { data, error } = await supabase.storage
+          .from('profile-images')
+          .upload(fileName, imageBlob, { 
+            contentType: 'image/jpeg', 
+            upsert: false 
+          });
+        if (error) throw error;
+      } else {
+        // Mobile: Use file object
+        const file = { uri: manipResult.uri, type: 'image/jpeg', name: fileName };
+        const { data, error } = await supabase.storage
+          .from('profile-images')
+          .upload(fileName, file);
+        if (error) throw error;
+      }
+      
       // Get public URL
-      const { data: publicUrlData } = supabase.storage.from('profile-images').getPublicUrl(filePath);
+      const { data: publicUrlData } = supabase.storage.from('profile-images').getPublicUrl(fileName);
       return publicUrlData?.publicUrl || null;
     } catch (error) {
       console.error('Image upload error:', error);

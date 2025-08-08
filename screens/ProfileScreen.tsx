@@ -11,6 +11,7 @@ import {
   Image,
   FlatList,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
 
 import { MaterialIcons } from '@expo/vector-icons';
@@ -18,6 +19,7 @@ import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/nativ
 import { supabase } from '../utils/supabaseClient';
 import { followUser, unfollowUser, isFollowing, getFollowersCount, getFollowingCount } from '../utils/followers';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 
 interface UserProfile {
   id: string;
@@ -214,18 +216,35 @@ export default function ProfileScreen() {
     setUploading(true);
     try {
       const file = result.assets[0];
+      
+      // Compress and resize the image using ImageManipulator (same as post images)
+      const manipResult = await ImageManipulator.manipulateAsync(
+        file.uri,
+        [{ resize: { width: 400 } }], // Smaller size for profile images
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+      );
+      
       const fileName = `profile_${profile.id}_${Date.now()}.jpg`;
-      // Upload to Supabase Storage (bucket: 'profileimage')
-      const { data, error } = await supabase.storage.from('profileimage').upload(fileName, {
-        uri: file.uri,
-        type: file.type || 'image/jpeg',
-        name: fileName,
-      });
-      if (error) throw error;
+      
+      // Handle upload differently for web vs mobile (same as post images)
+      if (Platform.OS === 'web') {
+        // Web: Convert to blob
+        const imageBlob = await fetch(manipResult.uri).then(res => res.blob());
+        await supabase.storage.from('profile-images').upload(fileName, imageBlob, { 
+          contentType: 'image/jpeg', 
+          upsert: false 
+        });
+      } else {
+        // Mobile: Use file object
+        const fileObj = { uri: manipResult.uri, type: 'image/jpeg', name: fileName };
+        await supabase.storage.from('profile-images').upload(fileName, fileObj);
+      }
+      
       // Get public URL
-      const { data: publicUrlData } = supabase.storage.from('profileimage').getPublicUrl(fileName);
+      const { data: publicUrlData } = supabase.storage.from('profile-images').getPublicUrl(fileName);
       const publicUrl = publicUrlData?.publicUrl;
       if (!publicUrl) throw new Error('Failed to get public URL');
+      
       // Update user profile
       await supabase.from('users').update({ profilePicture: publicUrl }).eq('id', profile.id);
       setProfile({ ...profile, profilePicture: publicUrl });
