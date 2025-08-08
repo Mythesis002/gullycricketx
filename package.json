@@ -9,7 +9,19 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "build": "npx expo export --platform web",
-    "vercel-build": "npx expo export --platform web"
+    "vercel-build": "npx expo export --platform web",
+    "deploy:web": "./deploy.sh web production",
+    "deploy:ios": "./deploy.sh ios production",
+    "deploy:android": "./deploy.sh android production",
+    "deploy:all": "./deploy.sh all production",
+    "deploy:dev": "./deploy.sh web development",
+    "build:ios": "eas build --platform ios",
+    "build:android": "eas build --platform android",
+    "build:all": "eas build --platform all",
+    "submit:ios": "eas submit --platform ios",
+    "submit:android": "eas submit --platform android",
+    "preview": "expo start --tunnel",
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@basictech/expo": "^0.0.5",
